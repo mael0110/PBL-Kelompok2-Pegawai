@@ -4,7 +4,6 @@ import Kategori from "../pages/kategori.vue";
 import Test from "../pages/test.vue";
 import Dashboard from "../pages/dashboard.vue";
 
-
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -23,7 +22,7 @@ const router = createRouter({
     },
     {
       path: "/",
-      component: Dashboard,
+      component: Kategori,
     },
   ],
 });

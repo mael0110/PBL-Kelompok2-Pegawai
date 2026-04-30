@@ -8,10 +8,10 @@ export function KategoriService() {
   async function getKategori() {
     try {
       // hit api
-      const res = await axios.get("http://localhost:1234/api/kategori.php");
-      console.log(res.data.data);
+      const res = await axios.get("http://localhost:3000/kategori");
+      console.log(res.data);
       // ambil response api dan masukkan ke variabel kategori
-      kategori.value = res.data.data;
+      kategori.value = res.data;
     } catch (error) {
       console.log(error);
     }
@@ -22,12 +22,11 @@ export function KategoriService() {
     try {
       // hit api
       const res = await axios.post(
-        "http://localhost:1234/api/kategori.php",
+        "http://localhost:3000/kategori",
         // tambahkan variabel payload dimana payload ini merupakan data yang ingin kita kirim ke api
         payload,
       );
       console.log(res.data);
-      await getKategori();
     } catch (error) {
       console.log(error);
     }

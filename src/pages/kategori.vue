@@ -1,4 +1,5 @@
 <template>
+  <h1>Kategori</h1>
   <table>
     <tr>
       <th class="text-red-500">No</th>
@@ -46,8 +47,12 @@ const payload = reactive({
 });
 
 async function doCreate() {
-  const formRequest = new FormData();
-  formRequest.append("nama_kategori", payload.nama_kategori);
-  await createKategori(formRequest);
+  try {
+    await createKategori(payload);
+    await getKategori();
+    payload.nama_kategori = "";
+  } catch (error) {
+    console.log(error);
+  }
 }
 </script>

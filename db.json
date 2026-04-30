@@ -1,0 +1,21 @@
+{
+  "kategori": [
+    {
+      "id": "1",
+      "nama_kategori": "Buku"
+    },
+    {
+      "id": "2",
+      "nama_kategori": "Hobi"
+    },
+    {
+      "nama_kategori": "fashion",
+      "id": "sxJ8g2--jLM"
+    },
+    {
+      "nama_kategori": "mainan",
+      "id": "yKBpYxNcFrI"
+    }
+  ],
+  "$schema": "./node_modules/json-server/schema.json"
+}
