@@ -2,6 +2,10 @@
 
 Fokus ke folder `src/` aja karena semua codingan nanti ada didalam folder itu, sama perhatikan file `kategori.vue` aja untuk front end nya, dan `service/kategori.js` untuk kode hit api nya.
 
+## Cara menggunakan
+
+Buka terminal
+
 > clone project
 
 ```terminalOutput
