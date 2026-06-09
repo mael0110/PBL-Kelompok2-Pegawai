@@ -205,12 +205,12 @@ const detailSesi = (s) => {
                   <h3 class="text-[12px] font-medium">Aqsal Habibi, S.Kom., M.Kom.</h3>
                   <p class="text-[11px] text-gray-600 mt-1">Dosen Pengampu</p>
 
-                  <!-- <div class="flex items-center gap-2 mt-2">
+                  <div class="flex items-center gap-2 mt-2">
                     <Mail class="w-4 h-4" />
                     <span class="text-[11px]">
                       aqsal.habibi@univ.ac.id
                     </span>
-                  </div> -->
+                  </div>
                 </div>
               </div>
 
