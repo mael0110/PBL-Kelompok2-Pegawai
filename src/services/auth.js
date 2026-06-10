@@ -51,8 +51,42 @@ export function authService() {
     }
   }
 
+  async function getProfile(employeeId) {
+    const token = localStorage.getItem("token");
+
+    const res = await axios.get(
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/employees/${employeeId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    return res.data;
+  }
+
+  async function updateEmployee(id, payload) {
+    const token = localStorage.getItem("token");
+
+    const res = await axios.put(
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/employees/${id}`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    return res.data;
+  }
+
   return {
     login,
     logout,
+    getProfile,
+    updateEmployee
   };
 }

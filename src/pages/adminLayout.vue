@@ -1,9 +1,10 @@
 <script setup>
-import { ref } from "vue";
+import { ref, toRef } from "vue";
 import logo from "../assets/logo.png";
 import {Bell, LogOut, Menu, TriangleAlert, LayoutDashboard, BookOpen, CircleCheck, MonitorCheck,  UserRound} from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { authService } from "../services/auth";
+import { profileStore } from "../assets/profile";
 
 const showSidebar = ref(true);
 const router = useRouter();
@@ -21,6 +22,10 @@ const handleLogout = async () => {
     localStorage.removeItem("token");
     router.push("/login");
   }
+};
+
+const goProfile = () => {
+  router.push("/biodata");
 };
 
 const bukaLogoutModal = () => {
@@ -50,8 +55,9 @@ const tutupLogoutModal = () => {
           <Bell size="22" color="white" />
         </button>
 
-        <div class="w-10 h-10 rounded-full bg-blue-300 flex items-center justify-center text-sm text-blue-900 font-bold">
-          AD
+        <div @click="goProfile" class="w-10 h-10 rounded-full bg-blue-300 flex items-center justify-center text-sm text-blue-900 font-bold">
+          <img  v-if="profileStore.photo" :src="profileStore.photo" class="w-full h-full object-cover rounded-full" />
+          <div v-else class="w-full h-full bg-gray-300 rounded-full"></div>
         </div>
       </div>
     </header>
@@ -64,7 +70,7 @@ const tutupLogoutModal = () => {
           <RouterLink to="/kelas" class="menu-link"><BookOpen :size="16" /><span>Kelas</span></RouterLink>
           <RouterLink to="/penilaian" class="menu-link"><CircleCheck :size="16" /><span>Penilaian</span></RouterLink>
           <RouterLink to="/presensi" class="menu-link"><MonitorCheck :size="16" /><span>Presensi</span></RouterLink>
-          <RouterLink to="/biodata" class="menu-link"><UserRound :size="16" /><span>Biodata</span></RouterLink>
+          <RouterLink to="/biodata" class="menu-link"><UserRound :size="16" /><span>Profile</span></RouterLink>
         </nav>
 
         <!-- Tambahkan pemicu logout agar fungsi tidak mubazir -->
