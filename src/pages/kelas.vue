@@ -1,53 +1,56 @@
 <script setup>
 import adminLayout from "./adminLayout.vue";
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { Search, Users } from "lucide-vue-next";
 import { useRouter } from "vue-router";
+import { kelasService } from "../services/kelas";
 
+// router
 const router = useRouter();
 
+// search input
 const search = ref("");
 
-const kelasList = ref([
-  {
-    id: 1,
-    nama_kelas: "Administrasi Database (4A)",
-    program_studi: "Teknik Informatika",
-    semester: "4 (Empat)",
-    sks: 3,
-    total_mahasiswa: 28,
-  },
-  {
-    id: 2,
-    nama_kelas: "Basis Data (2B)",
-    program_studi: "Sistem Informasi",
-    semester: "2 (Dua)",
-    sks: 3,
-    total_mahasiswa: 25,
-  },
-  {
-    id: 3,
-    nama_kelas: "Pemrograman Web (4B)",
-    program_studi: "Teknik Informatika",
-    semester: "4 (Empat)",
-    sks: 3,
-    total_mahasiswa: 26,
-  },
-]);
+// list kelas yang ditampilkan
+const kelasList = ref([]);
 
-const filteredKelas = computed(() => {
-  return kelasList.value.filter((item) =>
+// ambil service
+const { getKelas } = kelasService();
+
+// fetch kelas dari API
+const fetchKelas = async () => {
+  const data = await getKelas();
+  kelasList.value = data;
+};
+
+// filter kelas berdasarkan search
+const filteredKelas = computed(() =>
+  kelasList.value.filter((item) =>
     item.nama_kelas.toLowerCase().includes(search.value.toLowerCase())
-  );
-});
+  )
+);
 
+// navigasi ke detail kelas
 const detailKelas = (kelas) => {
   router.push({
     path: "/detail-kelas",
-    query: {
-      id: kelas.id,
-    },
+    query: { id: kelas.id },
   });
+};
+
+// panggil fetch saat mounted
+onMounted(() => {
+  fetchKelas();
+});
+
+const namaField = (field) => {
+  const map = {
+    "dasar-pemrograman" : "Dasar Pemprograman",
+    "data-struktur-algoritma": "Data Stuktur Algoritma",
+    "fisika-dasar": "Fisika Dasar",
+    "iot": "IOT"
+  };
+  return map[field] || field;
 };
 </script>
 
@@ -58,7 +61,6 @@ const detailKelas = (kelas) => {
 
       <div class="relative">
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"/>
-
         <input
           v-model="search"
           type="text"
@@ -76,24 +78,23 @@ const detailKelas = (kelas) => {
       >
         <div class="flex justify-between">
           <div>
-            <h2 class="font-bold text-[15px] mb-3">{{ kelas.nama_kelas }}</h2>
+            <h2 class="font-bold text-[15px] mb-3">{{ namaField(kelas.nama_kelas) }}</h2>
 
             <div class="space-y-1 text-[12px]">
               <div class="flex">
                 <span class="w-[120px]">Program Studi</span>
-                <span>  : {{ kelas.program_studi }}</span>
+                <span> : {{ kelas.program_studi }}</span>
               </div>
 
               <div class="flex">
                 <span class="w-[120px]">Semester</span>
-                <span>  : {{ kelas.semester }}</span>
+                <span> : {{ kelas.semester }}</span>
               </div>
 
               <div class="flex">
                 <span class="w-[120px]">SKS</span>
-                <span>  : {{ kelas.sks }}</span>
+                <span> : {{ kelas.sks }}</span>
               </div>
-
             </div>
           </div>
 
@@ -105,22 +106,13 @@ const detailKelas = (kelas) => {
               Detail Kelas
             </button>
 
-            <div
-              class="flex items-center gap-2 text-gray-600 text-[14px]">
+            <div class="flex items-center gap-2 text-gray-600 text-[14px]">
               <Users class="w-5 h-5" />
-              <span>  {{ kelas.total_mahasiswa }} Peserta</span>
+              <span> {{ kelas.total_mahasiswa }} Peserta</span>
             </div>
           </div>
         </div>
       </div>
     </div>
-
-    <!-- <div class="mt-4 flex justify-between items-center">
-      <p class="text-[12px] text-gray-500">
-        Menampilkan dari 1 - {{ filteredKelas.length }}
-        dari {{ kelasList.length }} kelas
-      </p>
-    </div> -->
-
   </adminLayout>
 </template>

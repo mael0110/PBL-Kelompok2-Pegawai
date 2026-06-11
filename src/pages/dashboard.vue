@@ -146,8 +146,10 @@ const bukaSesi = () => {
 const sudahPresensi = ref(false);
 const loadingPresensi = ref(false);
 
+// ambil tanggal hari ini untuk key localStorage
 const todayKey = new Date().toISOString().split("T")[0];
 
+// cek localStorage saat mounted
 onMounted(() => {
   const presensiTersimpan = localStorage.getItem("presensi_dosen_hari_ini");
   if (presensiTersimpan === todayKey) {
@@ -155,6 +157,7 @@ onMounted(() => {
   }
 });
 
+// fungsi presensi
 const handlePresensi = async () => {
   if (sudahPresensi.value) return; // disable jika sudah presensi
   loadingPresensi.value = true;
@@ -163,8 +166,10 @@ const handlePresensi = async () => {
     const response = await presensiDosen();
 
     if (response.success) {
+      // set status
       sudahPresensi.value = true;
 
+      // simpan ke localStorage supaya tetap stay walau refresh/logout
       localStorage.setItem("presensi_dosen_hari_ini", todayKey);
     }
   } catch (error) {
@@ -253,7 +258,11 @@ const handlePresensi = async () => {
           </div>
 
           <p class="text-center text-[16px] font-semibold mb-3">
-            {{ sudahPresensi ? "Kamu sudah presensi hari ini" : "Kamu belum presensi hari ini" }}
+            {{
+              sudahPresensi
+                ? "Kamu sudah presensi hari ini"
+                : "Kamu belum presensi hari ini"
+            }}
           </p>
           <div class="flex justify-center">
             <button

@@ -1,22 +1,163 @@
 <script setup>
 import adminLayout from "./adminLayout.vue";
 import { useRoute } from "vue-router";
-import { ref } from "vue";
 import { Search, UserRound } from "lucide-vue-next";
+import { ref, computed, onMounted } from "vue";
+import { kelasService } from "../services/kelas";
 
 const route = useRoute();
+
+const {
+  getMahasiswaKelas,
+  postPresensiMahasiswa,
+  updatePresensiMahasiswa,
+  getPresensiMahasiswa,
+} = kelasService();
+
+const classId = route.query.class_id;
+
 const searchMahasiswa = ref("");
-
-const sesi = {
-  id: route.query.id,
-  materi: route.query.materi,
-  tanggal: route.query.tanggal,
-  status: route.query.status,
-};  
-
+const daftarMahasiswa = ref([]);
 const showQrModal = ref(false);
+
+
+// ======================
+// LOAD MAHASISWA
+// ======================
+const loadMahasiswa = async () => {
+  try {
+    const res = await getMahasiswaKelas(classId);
+
+    daftarMahasiswa.value = res.map((item) => ({
+      id: item.mahasiswa?.[0]?.mahasiswa_id,
+      nama: item.mahasiswa?.[0]?.name,
+      email: item.mahasiswa?.[0]?.email,
+      status: "A",
+    }));
+
+    console.log("Mahasiswa:", daftarMahasiswa.value);
+  } catch (error) {
+    console.error("Gagal load mahasiswa:", error);
+  }
+};
+
+
+// ======================
+// LOAD PRESENSI
+// ======================
+const loadPresensi = async () => {
+  try {
+    const sesiId = route.query.id;
+
+    console.log("Sesi ID:", sesiId);
+
+    const res = await getPresensiMahasiswa(sesiId);
+
+    console.log("Data Presensi:", res);
+
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+
+// ======================
+// INIT
+// ======================
+onMounted(async () => {
+  await loadMahasiswa();
+  await loadPresensi();
+});
+
+
+// ======================
+// POST PRESENSI
+// ======================
+const simpanPresensi = async () => {
+  try {
+    const payload = {
+      pengampu_id:
+        "019eb0e3-ef81-7ade-b1bf-43fcc47ea03f",
+      sesi_id: route.query.id,
+      mahasiswa: daftarMahasiswa.value,
+    };
+
+    console.log("Payload Presensi:", payload);
+
+    const res = await postPresensiMahasiswa(payload);
+
+    console.log("Presensi berhasil:", res);
+
+    alert("Presensi berhasil disimpan");
+  } catch (error) {
+    console.error(
+      "Gagal simpan presensi:",
+      error.response?.data || error
+    );
+  }
+};
+
+
+// ======================
+// UPDATE PRESENSI
+// ======================
+const ubahStatus = async (mahasiswa, statusBaru) => {
+  try {
+    mahasiswa.status = statusBaru;
+
+    const statusMap = {
+      H: "hadir",
+      I: "izin",
+      S: "sakit",
+      A: "alpha",
+    };
+
+    const payload = {
+      sesi_id: route.query.id,
+      detail: [
+        {
+          detail_id: mahasiswa.id,
+          status: statusMap[statusBaru],
+        },
+      ],
+    };
+
+    console.log("Payload Update:", payload);
+
+    const res = await updatePresensiMahasiswa(payload);
+
+    console.log("Update berhasil:", res);
+  } catch (error) {
+    console.error(
+      "Gagal update presensi:",
+      error.response?.data || error
+    );
+
+    alert("Gagal update presensi");
+  }
+};
+
+
+// ======================
+// FILTER
+// ======================
+const filteredMahasiswa = computed(() => {
+  if (!searchMahasiswa.value) {
+    return daftarMahasiswa.value;
+  }
+
+  return daftarMahasiswa.value.filter((item) =>
+    item.nama
+      ?.toLowerCase()
+      .includes(searchMahasiswa.value.toLowerCase())
+  );
+});
+
+
+// ======================
+// QR
+// ======================
 const tampilkanQR = () => {
-  console.log("Tampilkan QR");
   showQrModal.value = true;
 };
 
@@ -24,10 +165,18 @@ const closeQrModal = () => {
   showQrModal.value = false;
 };
 
+
+// ======================
+// TUTUP SESI
+// ======================
 const tutupSesi = () => {
   console.log("Tutup sesi");
 };
 
+
+// ======================
+// DUMMY DATA
+// ======================
 const informasiSesi = {
   mataKuliah: "Administrasi Database",
   kelas: "4A",
@@ -39,44 +188,31 @@ const informasiSesi = {
 };
 
 const ringkasanPresensi = [
-  { label: "Hadir", jumlah: 21, persen: "75%", color: "bg-green-500" },
-  { label: "Izin", jumlah: 3, persen: "11%", color: "bg-yellow-400" },
-  { label: "Sakit", jumlah: 2, persen: "7%", color: "bg-blue-300" },
-  { label: "Alpha", jumlah: 2, persen: "7%", color: "bg-red-500" },
+  {
+    label: "Hadir",
+    jumlah: 21,
+    persen: "75%",
+    color: "bg-green-500",
+  },
+  {
+    label: "Izin",
+    jumlah: 3,
+    persen: "11%",
+    color: "bg-yellow-400",
+  },
+  {
+    label: "Sakit",
+    jumlah: 2,
+    persen: "7%",
+    color: "bg-blue-300",
+  },
+  {
+    label: "Alpha",
+    jumlah: 2,
+    persen: "7%",
+    color: "bg-red-500",
+  },
 ];
-
-const daftarMahasiswa = [
-  {
-    id: 1,
-    nama: "Citra Kirana",
-    nim: "C030324001",
-    status: "H",
-  },
-  {
-    id: 2,
-    nama: "Budi Siregar",
-    nim: "C030324002",
-    status: "I",
-  },
-  {
-    id: 3,
-    nama: "Ibnu",
-    nim: "C030324003",
-    status: "S",
-  },
-  {
-    id: 4,
-    nama: "Kamal Bujank",
-    nim: "C030324004",
-    status: "A",
-  },
-  {
-    id: 5,
-    nama: "Edy Saputra",
-    nim: "C030324005",
-    status: "H",
-  },
-];  
 </script>
 
 <template>
@@ -91,6 +227,10 @@ const daftarMahasiswa = [
                 <span class="mx-2 text-gr">&gt;</span>
                 <RouterLink to="/Kelas" class="hover:underline">
                     Kelas
+                </RouterLink>
+                <span class="mx-2 text-gr">&gt;</span>
+                <RouterLink to="/detail-kelas" class="hover:underline">
+                    Detail Kelas
                 </RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>Detail Sesi
             </p>
@@ -191,47 +331,66 @@ const daftarMahasiswa = [
             Daftar Presensi Mahasiswa
         </h2>
 
-        <div v-for="mahasiswa in daftarMahasiswa" :key="mahasiswa.id" class="bg-white shadow rounded-[4px] px-3 py-2 flex items-center justify-between mb-1">
+        <button
+        @click="simpanPresensi"
+        class="bg-green-600 text-white px-4 py-2 rounded-md mb-4"
+        >
+        Simpan Presensi
+        </button>
+
+        <div v-for="mahasiswa in filteredMahasiswa" :key="mahasiswa.id" class="bg-white shadow rounded-[4px] px-3 py-2 flex items-center justify-between mb-1">
             <!-- kiri -->
             <div class="flex items-center gap-4 w-[45%]">
             <UserRound class="w-4 h-4 text-blue-900" />
             <p class="text-[12px]">{{ mahasiswa.nama }}</p>
             </div>
 
-            <div class="w-[20%] text-[12px]">
-            {{ mahasiswa.nim }}
-            </div>
+            <!-- <div class="w-[20%] text-[12px]">
+            {{ mahasiswa.email }}
+            </div> -->
 
             <div class="flex gap-4">
             <button
+                @click="ubahStatus(mahasiswa, 'A')"
+                type="button"
                 class="w-9 h-9 rounded-full border text-[12px]"
                 :class="mahasiswa.status === 'A'
                 ? 'bg-red-500 text-white border-red-500'
-                : 'border-gray-300'">
+                : 'border-gray-300'"
+            >
                 A
             </button>
 
             <button
+                @click="ubahStatus(mahasiswa, 'H')"
+                type="button"
                 class="w-9 h-9 rounded-full border text-[12px]"
                 :class="mahasiswa.status === 'H'
                 ? 'bg-green-500 text-white border-green-500'
-                : 'border-gray-300'">
+                : 'border-gray-300'"
+            >
                 H
             </button>
 
             <button
+                @click="ubahStatus(mahasiswa, 'I')"
+                type="button"
                 class="w-9 h-9 rounded-full border text-[12px]"
                 :class="mahasiswa.status === 'I'
                 ? 'bg-yellow-500 text-white border-yellow-500'
-                : 'border-gray-300'">
+                : 'border-gray-300'"
+            >
                 I
             </button>
 
             <button
+                @click="ubahStatus(mahasiswa, 'S')"
+                type="button"
                 class="w-9 h-9 rounded-full border text-[12px]"
                 :class="mahasiswa.status === 'S'
                 ? 'bg-blue-500 text-white border-blue-500'
-                : 'border-gray-300'">
+                : 'border-gray-300'"
+            >
                 S
             </button>
             </div>
