@@ -11,7 +11,7 @@ const {
   getMahasiswaKelas,
   postPresensiMahasiswa,
   updatePresensiMahasiswa,
-  getPresensiMahasiswa,
+  getPresensiMahasiswa
 } = kelasService();
 
 const classId = route.query.class_id;
@@ -20,10 +20,7 @@ const searchMahasiswa = ref("");
 const daftarMahasiswa = ref([]);
 const showQrModal = ref(false);
 
-
-// ======================
-// LOAD MAHASISWA
-// ======================
+//load mahasiswa
 const loadMahasiswa = async () => {
   try {
     const res = await getMahasiswaKelas(classId);
@@ -32,7 +29,7 @@ const loadMahasiswa = async () => {
       id: item.mahasiswa?.[0]?.mahasiswa_id,
       nama: item.mahasiswa?.[0]?.name,
       email: item.mahasiswa?.[0]?.email,
-      status: "A",
+      status: "",
     }));
 
     console.log("Mahasiswa:", daftarMahasiswa.value);
@@ -42,9 +39,7 @@ const loadMahasiswa = async () => {
 };
 
 
-// ======================
-// LOAD PRESENSI
-// ======================
+//load presensi
 const loadPresensi = async () => {
   try {
     const sesiId = route.query.id;
@@ -55,24 +50,49 @@ const loadPresensi = async () => {
 
     console.log("Data Presensi:", res);
 
+    if (!res) {
+      console.log("Belum ada presensi");
+      return;
+    }
+
+    const statusMap = {
+      hadir: "H",
+      izin: "I",
+      sakit: "S",
+      alpha: "A",
+    };
+
+    res.mahasiswa.forEach((item) => {
+      const mahasiswa = daftarMahasiswa.value.find(
+        (m) => m.id === item.detail_id
+      );
+
+      if (mahasiswa) {
+        mahasiswa.status =
+          statusMap[item.status?.toLowerCase()] || null;
+      }
+    });
+
+    console.log(
+      "Mahasiswa setelah merge presensi:",
+      daftarMahasiswa.value
+    );
+
   } catch (error) {
-    console.error(error);
+    console.error(
+      "Gagal load presensi:",
+      error.response?.data || error
+    );
   }
 };
 
-
-// ======================
-// INIT
-// ======================
 onMounted(async () => {
   await loadMahasiswa();
   await loadPresensi();
 });
 
 
-// ======================
-// POST PRESENSI
-// ======================
+//post presensi
 const simpanPresensi = async () => {
   try {
     const payload = {
@@ -98,9 +118,7 @@ const simpanPresensi = async () => {
 };
 
 
-// ======================
-// UPDATE PRESENSI
-// ======================
+//put presensi
 const ubahStatus = async (mahasiswa, statusBaru) => {
   try {
     mahasiswa.status = statusBaru;
@@ -138,9 +156,7 @@ const ubahStatus = async (mahasiswa, statusBaru) => {
 };
 
 
-// ======================
-// FILTER
-// ======================
+//filter
 const filteredMahasiswa = computed(() => {
   if (!searchMahasiswa.value) {
     return daftarMahasiswa.value;
@@ -153,30 +169,12 @@ const filteredMahasiswa = computed(() => {
   );
 });
 
-
-// ======================
-// QR
-// ======================
-const tampilkanQR = () => {
-  showQrModal.value = true;
-};
-
-const closeQrModal = () => {
-  showQrModal.value = false;
-};
-
-
-// ======================
-// TUTUP SESI
-// ======================
+//tutup sesi
 const tutupSesi = () => {
   console.log("Tutup sesi");
 };
 
-
-// ======================
-// DUMMY DATA
-// ======================
+//dummy
 const informasiSesi = {
   mataKuliah: "Administrasi Database",
   kelas: "4A",
@@ -245,11 +243,6 @@ const ringkasanPresensi = [
                 <Search class="w-5 h-5 text-gray-400" />
                 <input v-model="searchMahasiswa" type="text" placeholder="Cari Mahasiswa..." class="w-full outline-none text-[12px]"/>
             </div>
-
-            <!-- qr -->
-            <button @click="tampilkanQR" class="bg-blue-900 text-white px-4 py-2 rounded-[4px] text-[12px] font-semibold hover:bg-blue-950">
-                Tampilkan QR
-            </button>
 
             <!-- tutup sesi -->
             <button @click="tutupSesi" class="bg-red-500 text-white px-4 py-2 rounded-[4px] text-[12px] font-semibold" >
@@ -333,7 +326,7 @@ const ringkasanPresensi = [
 
         <button
         @click="simpanPresensi"
-        class="bg-green-600 text-white px-4 py-2 rounded-md mb-4"
+        class="bg-green-600 text-white text-[12px] px-4 py-2 rounded-md mb-4"
         >
         Simpan Presensi
         </button>

@@ -1,75 +1,92 @@
 <script setup>
 import adminLayout from "./adminLayout.vue";
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { User, Clock, Users, UserRound } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
+// Service
+const { getSesiPengampu, getMahasiswaKelas } = kelasService();
+
+// Router
 const route = useRoute();
 const router = useRouter();
-const classId = route.query.id || ""; // id kelas dari query
-const { getDetailKelas } = kelasService();
 
+// Ambil query params: classId, kode matkul, dan pengampuId
+const classId = route.query.id || "";
+const mataKuliahKode = route.query.kode || "";
+const pengampuId = route.query.pengampuId || "";
+
+// Tab sidebar
 const activeTab = ref("informasi");
+
+// Data kelas, sesi, peserta
+const infoKelas = ref({});
+const sesiList = ref([]);
+const pesertaKelas = ref([]);
 const meta = ref({});
 const currentPage = ref(1);
 
-const sesi = ref([]);
-const infoKelas = ref({});
-const pesertaKelas = ref([]);
-
-// Fetch detail kelas
-const fetchDetailKelas = async (page = 1) => {
-  if (!classId) return;
+// Fetch sesi pelajaran berdasarkan pengampuId
+const fetchSesiPelajaran = async () => {
+  if (!pengampuId || !mataKuliahKode) return;
 
   try {
-    const res = await getDetailKelas(classId, page);
+    console.log("DEBUG classId =", classId, "pengampuId =", pengampuId, "mataKuliahKode =", mataKuliahKode);
 
-    if (res && res.data) {
-      // Ambil info kelas dari object pertama jika ada
-      const first = res.data[0];
-      infoKelas.value = {
-        mataKuliah: first?.mata_kuliah?.name || "-",
-        kode: first?.mata_kuliah?.kode || "-",
-        prodi: first?.program_studi?.name || "-",
-        semester: first?.semester || "-",
-        sks: first?.mata_kuliah?.sks || "-",
-        kelas: first?.kelas?.name || "-",
-        dosen: first?.dosen?.name || "-",
-        hari: first?.hari || "-",
-        waktu: first?.waktu || "-",
-        ruangan: first?.ruangan || "-",
-        tahunAkademik: first?.tahun_akademik || "-",
-        peserta: first?.peserta?.length || 0,
-      };
+    // Ambil semua sesi dari pengampu
+    const semuaSesi = await getSesiPengampu(pengampuId);
 
-      // Ambil sesi kelas
-      sesi.value = res.data.map((item) => ({
-        id: item.id,
-        tanggal: item.session_date,
-        materi: item.course_name || "-",
-        status:
-          item.status === "closed"
-            ? "Selesai"
-            : item.status === "open"
-            ? "Berjalan"
-            : "Belum",
+    // Filter sesuai kode mata kuliah
+    sesiList.value = semuaSesi
+      .filter(s => s.course_code === mataKuliahKode)
+      .map(s => ({
+        id: s.id,
+        tanggal: s.session_date,
+        materi: s.course_name || "-",
+        status: s.status === "closed" ? "Selesai" : s.status === "open" ? "Berjalan" : "Belum",
       }));
 
-      meta.value = res.meta || {};
-      currentPage.value = res.meta?.current_page || 1;
+    // Ambil info kelas dari sesi pertama
+    if (sesiList.value.length > 0) {
+      const first = semuaSesi.find(s => s.course_code === mataKuliahKode);
 
-      // Ambil peserta kelas jika tersedia
-      pesertaKelas.value = first?.peserta || [];
+      infoKelas.value = {
+        mataKuliah: first.course_name || "-",
+        kode: first.course_code || "-",
+        kelas: first.class_name || "-",
+        dosen: first.lecturer?.employee_name || "-",
+        peserta: first.total_mahasiswa || 0,
+        hari: "-", // bisa diisi sesuai kebutuhan
+        waktu: `${first.start_time} - ${first.end_time}`,
+        ruangan: "-", 
+        semester: "-", 
+        sks: "-", 
+        prodi: "-", 
+        tahunAkademik: "-"
+      };
     }
+
   } catch (err) {
-    console.error("Gagal ambil detail kelas:", err);
+    console.error("Gagal ambil sesi pelajaran:", err);
   }
 };
 
-// Pagination untuk sesi
-const goPage = async (page) => {
-  await fetchDetailKelas(page);
+// Fetch peserta kelas
+const fetchPesertaKelas = async () => {
+  if (!classId) return;
+
+  try {
+    const data = await getMahasiswaKelas(classId);
+    pesertaKelas.value = data.map(m => ({
+      id: m.id,
+      nama: m.nama,
+      nim: m.nim,
+      status: m.status || "A"
+    }));
+  } catch (error) {
+    console.error("Gagal ambil peserta kelas:", error);
+  }
 };
 
 // Navigasi ke detail sesi
@@ -80,8 +97,10 @@ const detailSesi = (s) => {
   });
 };
 
+// Jalankan fetch saat mounted
 onMounted(() => {
-  fetchDetailKelas(currentPage.value);
+  fetchSesiPelajaran();
+  fetchPesertaKelas();
 });
 </script>
 
@@ -172,7 +191,7 @@ onMounted(() => {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="s in sesi" :key="s.id" class="hover:bg-gray-50 border-b border-gray-300">
+            <tr v-for="s in sesiList" :key="s.id" class="hover:bg-gray-50 border-b border-gray-300">
               <td class="p-2 text-center">{{ s.tanggal }}</td>
               <td class="p-2 text-center">{{ s.materi }}</td>
               <td class="p-2 text-center">
@@ -190,21 +209,6 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
-
-        <div v-if="meta && meta.links" class="flex justify-center gap-2 mt-4">
-          <button
-            v-for="(link, index) in meta.links"
-            :key="index"
-            :disabled="!link.url || !link.page"
-            @click="goPage(link.page)"
-            class="px-3 py-1 rounded border text-sm"
-            :class="link.active
-              ? 'bg-blue-900 text-white'
-              : 'bg-white text-blue-900 hover:bg-blue-100'"
-          >
-            <span v-html="link.label"></span>
-          </button>
-        </div>
       </div>
 
       <!-- Pengajar & Peserta -->
@@ -244,5 +248,5 @@ onMounted(() => {
       </div>
     </div>
   </div>
-  </adminLayout>
+</adminLayout>
 </template>

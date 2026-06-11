@@ -34,7 +34,11 @@ const filteredKelas = computed(() =>
 const detailKelas = (kelas) => {
   router.push({
     path: "/detail-kelas",
-    query: { id: kelas.id },
+    query: { 
+      id: kelas.id, 
+      kode: kelas.kode,
+      pengampuId: kelas.pengampuId   // wajib ini
+    },
   });
 };
 

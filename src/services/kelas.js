@@ -2,7 +2,7 @@ import axios from "axios";
 
 export function kelasService() {
 
-  async function getSesiPengampu(pengampuId) {
+  async function getSesiPengampu(pengampuId, page=1) {
     const token = localStorage.getItem("token");
 
     try {
@@ -54,6 +54,8 @@ export function kelasService() {
 
         return {
           id: item.mata_kuliah.id,
+          kode: item.mata_kuliah.kode,          // tambahkan ini
+          pengampuId: item.pengampu_id,        // tambahkan ini
           nama_kelas: item.mata_kuliah.name,
           program_studi: item.program_studi?.name || "Teknik Informatika",
           semester: item.semester || "4 (Empat)",
@@ -176,7 +178,7 @@ async function getPresensiMahasiswa(sesiId) {
           Accept: "application/json",
         },
         params: {
-          id: sesiId,
+          sesi_id: sesiId,
         },
       }
     );
@@ -185,12 +187,8 @@ async function getPresensiMahasiswa(sesiId) {
 
     return res.data.data;
   } catch (error) {
-    console.error(
-      "Gagal ambil presensi:",
-      error.response?.data || error
-    );
-
-    return null;
+  console.log("ERROR PRESENSI");
+  console.log(error.response?.data);
   }
 }
 
@@ -201,6 +199,6 @@ async function getPresensiMahasiswa(sesiId) {
     getMahasiswaKelas,
     postPresensiMahasiswa,
     updatePresensiMahasiswa,
-    getPresensiMahasiswa
+    getPresensiMahasiswa, 
   };
 }
