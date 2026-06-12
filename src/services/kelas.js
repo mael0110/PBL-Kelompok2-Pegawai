@@ -1,14 +1,19 @@
 import axios from "axios";
+import {ref} from "vue";
 
 export function kelasService() {
+  const meta = ref({});
 
-  async function getSesiPengampu(pengampuId, page=1) {
+  async function getSesiPengampu(pengampuId, page = 1) {
     const token = localStorage.getItem("token");
 
     try {
       const res = await axios.get(
         `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
         {
+          params: {
+            page
+          },
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: "application/json",
@@ -17,6 +22,7 @@ export function kelasService() {
       );
 
       console.log("Response API sesi pengampu:", res.data);
+      meta.value = res.data.data.meta;
       return res.data.data || [];
 
     } catch (error) {
@@ -193,6 +199,7 @@ async function getPresensiMahasiswa(sesiId) {
 }
 
   return { 
+    meta,
     getSesiPengampu, 
     getKelas, 
     getDetailKelas, 
