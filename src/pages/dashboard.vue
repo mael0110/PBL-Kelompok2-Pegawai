@@ -145,14 +145,48 @@ const bukaSesi = () => {
 //presensi dosen
 const sudahPresensi = ref(false);
 const loadingPresensi = ref(false);
+const showPresensiModal = ref(false);
+const statusPresensi = ref("");
+
+const submitPresensi = async () => {
+  if (!statusPresensi.value) return;
+
+  loadingPresensi.value = true;
+
+  try {
+    // ✅ PAYLOAD SESUAI API
+    const payload = {
+      status: statusPresensi.value, // hadir / izin / sakit / alpha
+    };
+
+    console.log("📤 Payload dikirim:", payload);
+
+    const res = await presensiDosen(payload);
+
+    if (res?.success) {
+      console.log("✅ PRESENSI BERHASIL");
+
+      sudahPresensi.value = true;
+      localStorage.setItem("presensi_dosen_hari_ini", todayKey);
+
+      showPresensiModal.value = false;
+      statusPresensi.value = "";
+    }
+
+  } catch (error) {
+    console.error("❌ Error submit presensi:", error);
+  } finally {
+    loadingPresensi.value = false;
+  }
+};
 
 // ambil tanggal hari ini untuk key localStorage
 const todayKey = new Date().toISOString().split("T")[0];
 
 // cek localStorage saat mounted
 onMounted(() => {
-  const presensiTersimpan = localStorage.getItem("presensi_dosen_hari_ini");
-  if (presensiTersimpan === todayKey) {
+  const saved = localStorage.getItem("presensi_dosen_hari_ini");
+  if (saved === todayKey) {
     sudahPresensi.value = true;
   }
 });
@@ -266,7 +300,7 @@ const handlePresensi = async () => {
           </p>
           <div class="flex justify-center">
             <button
-              @click="handlePresensi"
+              @click="showPresensiModal = true"
               :disabled="sudahPresensi || loadingPresensi"
               class="bg-blue-900 text-white px-8 py-2 rounded-[5px] text-[13px] font-semibold disabled:bg-gray-400"
             >
@@ -348,6 +382,7 @@ const handlePresensi = async () => {
 
     </div>
 
+    <!-- //buka sesi  -->
     <div
       v-if="showModal"
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
@@ -411,6 +446,48 @@ const handlePresensi = async () => {
         </div>
       </div>
     </div>
+
+    <!-- presensi -->
+    <div
+      v-if="showPresensiModal"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    >
+      <div class="bg-white w-[320px] p-6 rounded-[10px] shadow-lg relative">
+
+        <!-- close -->
+        <button
+          class="absolute top-2 right-3 text-[20px]"
+          @click="showPresensiModal = false"
+        >
+          ×
+        </button>
+
+        <h2 class="text-center font-semibold mb-4">
+          Pilih Status Presensi
+        </h2>
+
+        <!-- SELECT -->
+        <select
+          v-model="statusPresensi"
+          class="w-full border p-2 rounded mb-5 text-[13px]"
+        >
+          <option disabled value="">Pilih status</option>
+          <option value="hadir">Hadir</option>
+          <option value="izin">Izin</option>
+          <option value="sakit">Sakit</option>
+          <option value="alpha">Alpha</option>
+        </select>
+
+        <button
+          @click="submitPresensi"
+          class="w-full bg-blue-900 text-white py-2 rounded"
+          :disabled="!statusPresensi"
+        >
+          Kirim Presensi
+        </button>
+      </div>
+    </div>
+
     
   </adminLayout>
 </template>
