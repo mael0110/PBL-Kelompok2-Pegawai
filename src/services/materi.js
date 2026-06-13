@@ -123,11 +123,63 @@ async function uploadFiles(fileList) {
   }
 }
 
+async function getSesiPengampu(pengampuId, page = 1) {
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/class-sessions/pengampu/${pengampuId}`,
+        {
+          params: {
+            page
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      console.log("Response API sesi pengampu:", res.data);
+      return res.data.data || [];
+
+    } catch (error) {
+      console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
+      return [];
+    }
+  }
+
+async function hapusMateri(classSessionId, learningMaterialIds) {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await axios.post(
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${classSessionId}/learning-materials/delete`,
+      {
+        // SINKRONISASI: Gunakan 'learningMaterialIds' sesuai dengan nama parameter di atas
+        file_uuids: learningMaterialIds 
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          "Content-Type": "application/json"
+        },
+      }
+    );
+    return res.data;
+  } catch (error) {
+    console.error("Gagal menghapus materi:", error.response?.data || error);
+    throw error;
+  }
+}
+
   return {
     uploadFiles,
     tambahMateri,
     getFileUploads, 
     downloadFileApi,
-    deleteFileApi
+    deleteFileApi,
+    getSesiPengampu,
+    hapusMateri
   };
 }

@@ -19,7 +19,15 @@ const {
   getPresensiMahasiswa,
 } = kelasService();
 
-const{ tambahMateri, uploadFiles, getFileUploads, downloadFileApi, deleteFileApi} = materiService();
+const{ 
+  tambahMateri, 
+  uploadFiles, 
+  getFileUploads, 
+  downloadFileApi, 
+  deleteFileApi,
+  getSesiPengampu,
+  hapusMateri
+} = materiService();
 
 //get file
 
@@ -44,17 +52,74 @@ const triggerFileInput = () => {
   }
 };
 
+//fetch materi
 const fetchMateri = async () => {
-  const classSessionId = route.query.id;
+  const idPengampu = route.query.pengampuId || route.query.pengampu_id || route.query.pengampuid;
+  const currentSesiId = route.query.id; 
 
-  const res = await getMateri(classSessionId);
+  if (!idPengampu) {
+    console.warn("pengampuId tidak ditemukan di URL");
+    return;
+  }
 
-  materiList.value = res?.data || [];
+  try {
+    const semuaSesi = await getSesiPengampu(idPengampu);
+
+    const sesiAktif = semuaSesi.find(sesi => sesi.id === currentSesiId);
+
+    if (sesiAktif) {
+      materiList.value = sesiAktif.learning_materials.map(material => ({
+        id: material.id,
+        title: "Dokumen Materi", 
+        description: `Diunggah pada: ${new Date(material.uploaded_at).toLocaleDateString('id-ID')}`,
+        files: [
+          {
+            name: material.original_file_name
+          }
+        ]
+      }));
+      console.log("Materi berhasil dimuat:", materiList.value);
+    } else {
+      materiList.value = [];
+    }
+  } catch (err) {
+    console.error("Gagal memproses data materi:", err);
+  }
 };
 
 onMounted(() => {
   fetchMateri();
 });
+
+//hapus materi 
+const onHapusMateri = async (materialId) => {
+  // Antisipasi jika ID yang dilempar tidak sengaja kosong atau berbentuk event objek
+  if (!materialId || typeof materialId !== 'string') {
+    console.warn("ID Materi tidak valid atau tidak ditemukan:", materialId);
+    alert("Gagal menghapus: ID Materi tidak terbaca dengan benar.");
+    return;
+  }
+
+  const konfirmasi = confirm("Apakah Anda yakin ingin menghapus dokumen materi ini?");
+  if (!konfirmasi) return;
+
+  try {
+    const classSessionId = route.query.id; // Mengambil ID Sesi dari URL aktif
+    const idsYangDihapus = [materialId];  // Membungkus ID ke dalam array karena API mendukung multiple delete
+
+    const res = await hapusMateri(classSessionId, idsYangDihapus);
+
+    if (res?.success || res?.code === 200) {
+      alert("Materi berhasil dihapus!");
+      await fetchMateri(); // Menyegarkan kembali daftar materi di UI setelah sukses dihapus
+    } else {
+      alert("Gagal menghapus materi: " + (res?.message || "Terjadi kesalahan server"));
+    }
+  } catch (error) {
+    console.error("Proses hapus materi gagal:", error);
+    alert("Terjadi kesalahan saat menghubungi server untuk menghapus materi.");
+  }
+};
 
 const submitMateri = async () => {
   try {
@@ -65,17 +130,16 @@ const submitMateri = async () => {
       return;
     }
 
-    const res = await tambahMateri(
-      classSessionId,
-      fileUuids.value
-    );
-
+    const res = await tambahMateri(classSessionId, fileUuids.value);
     console.log("MATERI SUCCESS:", res);
+    alert("Materi berhasil disimpan!");
 
     showMateriModal.value = false;
 
-    fileUuids.value = [];
-    selectedFileUuids.value = [];
+    deskripsiMateri.value = "";   
+    uploadedFiles.value = [];     
+    fileUuids.value = [];         
+    selectedFileUuids.value = []; 
 
   } catch (err) {
     console.error(err);
@@ -142,12 +206,21 @@ const openFileLibrary = async () => {
     console.error("Gagal memuat file library:", err);
   }
 };
+
 // pilih file dari library
 const pilihFileLibrary = () => {
   fileUuids.value = [...selectedFileUuids.value];
 
-  console.log("FILE TERPILIH:", fileUuids.value);
+  console.log("FILE TERPILIH (UUID):", fileUuids.value);
 
+  uploadedFiles.value = filesLibrary.value.filter((file) => 
+    selectedFileUuids.value.includes(file.uuid)
+  ).map((file) => ({
+    uuid: file.uuid,
+    name: file.name
+  }));
+
+  // 3. Tutup pop-up Media Library
   showFileLibraryModal.value = false;
 };
 
@@ -181,6 +254,7 @@ const downloadFile = async (file) => {
   }
 };
 
+//hapus file 
 const deleteFile = async (uuid) => {
   const konfirmasi = confirm("Apakah Anda yakin ingin menghapus file ini secara permanen?");
   if (!konfirmasi) return;
@@ -487,7 +561,7 @@ const tutupSesi = () => {
     </div>
 
     <div class="grid grid-cols-2 gap-5 mb-5">
-                <!-- materi -->
+        <!-- materi -->
         <div class="bg-white rounded-[10px] shadow p-5 ">
 
           <h2 class="text-center font-semibold mb-4 border-b border-gray-300">
@@ -500,25 +574,34 @@ const tutupSesi = () => {
 
           <div v-else class="space-y-3">
 
-            <div
-              v-for="(m, i) in materiList"
-              :key="i"
-              class="border rounded p-3 text-[12px]"
-            >
+<div
+  v-for="(m, i) in materiList"
+  :key="i"
+  class="border border-gray-300 rounded p-3 text-[12px] bg-white mb-2"
+>
+  <p class="font-semibold">
+    {{ m.title || "Tanpa Judul" }}
+  </p>
 
-              <p class="font-semibold">
-                {{ m.title || "Tanpa Judul" }}
-              </p>
+  <p class="text-gray-500">
+    {{ m.description || "-" }}
+  </p>
 
-              <p class="text-gray-500">
-                {{ m.description || "-" }}
-              </p>
+  <div v-if="m.files && m.files.length" class="flex justify-between items-center bg-gray-50 p-2 border rounded mt-2">
+    <span class="truncate max-w-[250px]">
+     {{ m.files[0].name }}
+    </span>
 
-              <div v-if="m.files.length">
-                📎 {{ m.files[0].name }}
-              </div>
-
-            </div>
+    <button 
+      @click="onHapusMateri(m.id)" 
+      type="button"
+      class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50 transition shrink-0"
+      title="Hapus Materi"
+    >
+      <Trash2 class="w-4 h-4" /> 
+    </button>
+  </div>
+</div>
 
           </div>
 
@@ -651,62 +734,75 @@ const tutupSesi = () => {
 
     <!-- pop up tambah materi -->
     <div
-    v-if="showMateriModal"
-    class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-  >
-    <div class="bg-white w-[420px] rounded-[10px] p-6 relative shadow-lg">
+      v-if="showMateriModal"
+      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    >
+      <div class="bg-white w-[420px] rounded-[10px] p-6 relative shadow-lg">
 
-      <!-- CLOSE -->
-      <button
-        @click="showMateriModal = false"
-        class="absolute top-3 right-4 text-[22px]"
-      >
-        ×
-      </button>
-
-      <h2 class="text-center text-[18px] font-semibold mb-4">
-        Tambah Materi
-      </h2>
-      <!-- DESKRIPSI -->
-      <label class="text-[13px]">Deskripsi Materi</label>
-      <textarea
-        v-model="deskripsiMateri"
-        class="w-full border rounded px-3 py-2 mb-3 text-[13px]"
-      />
-
-      <!-- FILE -->
-      <button
-        @click="openFileLibrary"
-          class=" text-[12px] px-6 py-2 bg-green-600 text-white rounded mb-2 hover:bg-green-500"
-        >
-          Tambah File
-      </button>
-      <label class="text-[13px]"></label>
-      <input
-        type="file"
-        class="w-full border rounded px-3 py-2 text-[12px]"
-        @change="handleFileUpload"
-      />
-
-      <!-- BUTTON -->
-      <div class="flex justify-between mt-6">
         <button
           @click="showMateriModal = false"
-          class="text-[12px] px-6 py-2 bg-red-700 text-white rounded hover:bg-red-500"
+          class="absolute top-3 right-4 text-[22px]"
         >
-          Batal
+          ×
         </button>
 
-        <button
-          @click="submitMateri"
-          class="text-[12px] px-6 py-2 bg-blue-900 text-white rounded hover:bg-blue-800"
-        >
-          Simpan
-        </button>
+        <h2 class="text-center text-[18px] font-semibold mb-4">
+          Tambah Materi
+        </h2>
+        
+        <div class="flex flex-col mb-4">
+          <label class="text-[13px] mb-1 font-medium">Dokumen Pendukung</label>
+          <button
+            @click="openFileLibrary"
+            type="button"
+            class="text-[12px] px-4 py-2 bg-green-600 text-white rounded hover:bg-green-500 font-medium transition w-max"
+          >
+            Pilih dari Media Library
+          </button>
+        </div>
+
+        <div v-if="uploadedFiles.length > 0" class="mb-4">
+          <p class="text-[12px] font-semibold text-gray-700 mb-1.5">File Terpilih:</p>
+          <div class="max-h-[100px] overflow-y-auto space-y-1.5 border border-dashed rounded-lg p-2 bg-gray-50">
+            <div
+              v-for="(f, i) in uploadedFiles"
+              :key="i"
+              class="flex items-center justify-between bg-white px-2 py-1 rounded border text-[12px]"
+            >
+              <span class="truncate max-w-[280px] text-gray-600"> {{ f.name }}</span>
+              <button 
+                type="button"
+                @click="
+                  uploadedFiles.splice(i, 1);
+                  selectedFileUuids = selectedFileUuids.filter(id => id !== f.uuid);
+                  fileUuids = fileUuids.filter(id => id !== f.uuid);
+                "
+                class="text-red-500 font-bold hover:text-red-700 px-1"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-between mt-6 border-t pt-4">
+          <button
+            @click="showMateriModal = false"
+            class="text-[12px] px-6 py-2 bg-red-700 text-white rounded hover:bg-red-500"
+          >
+            Batal
+          </button>
+
+          <button
+            @click="submitMateri"
+            class="text-[12px] px-6 py-2 bg-blue-900 text-white rounded hover:bg-blue-800"
+          >
+            Simpan
+          </button>
+        </div>
+
       </div>
-
     </div>
-  </div>
 
   <div v-if="uploadedFiles && uploadedFiles.length > 0">
     <p class="text-[12px] font-semibold mb-2">File terupload:</p>
@@ -714,117 +810,97 @@ const tutupSesi = () => {
     <div
       v-for="(f, i) in uploadedFiles"
       :key="i"
-      class="text-[12px] text-gray-600"
-    >
+      class="text-[12px] text-gray-600">
        {{ f.name }}
     </div>
   </div>
 
   <!-- FILE LIBRARY POP-UP -->
-<div
-  v-if="showFileLibraryModal"
-  class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
->
-  <div class="bg-white w-[520px] rounded-[10px] p-6 relative shadow-lg">
+  <div
+    v-if="showFileLibraryModal"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+  >
+    <div class="bg-white w-[520px] rounded-[10px] p-6 relative shadow-lg">
 
-    <!-- CLOSE -->
-    <button
-      @click="showFileLibraryModal = false"
-      class="absolute top-3 right-4 text-[22px]"
-    >
-      ×
-    </button>
-
-    <h2 class="text-center text-[18px] font-semibold mb-4">
-      Media Library
-    </h2>
-
-    <!-- UPLOAD BAR -->
-    <div class="flex justify-end mb-4">
       <button
-        @click="triggerFileInput" type="button"
-        class="bg-green-600 text-white px-4 py-2 rounded text-[12px] font-medium hover:bg-green-500"
-      >
-        Upload Baru
+        @click="showFileLibraryModal = false"
+        class="absolute top-3 right-4 text-[22px]">
+        ×
       </button>
-      <input 
-        type="file"
-        ref="fileInput"
-        class="hidden"
-        multiple
-        @change="handleUploadFile"
-        >
-    </div>
 
-    <!-- FILE LIST -->
-    <div class="max-h-[300px] overflow-y-auto border rounded-lg p-3 bg-gray-50">
+      <h2 class="text-center text-[18px] font-semibold mb-4">
+        Media Library
+      </h2>
 
-      <div
-        v-for="file in filesLibrary"
-        :key="file.uuid"
-        class="flex items-center justify-between bg-white rounded-lg px-3 py-2 mb-2 hover:shadow-sm transition"
-      >
-
-        <!-- LEFT: checkbox + file name -->
-        <div class="flex items-center gap-3">
-
-          <input
-            type="checkbox"
-            :value="file.uuid"
-            v-model="selectedFileUuids"
-            class="w-4 h-4"
-          />
-          
-          <!-- file name -->
-          <span class="text-[13px] truncate max-w-[250px]">
-            {{ file.name }}
-          </span>
-
-        </div>
-
-        <!-- RIGHT: actions -->
-        <div class="flex items-center gap-3">
-
-          <!-- DOWNLOAD -->
-          <button
-            @click="downloadFile(file)"
-            class="text-blue-600 hover:text-blue-800 transition"
+      <div class="flex justify-end mb-4">
+        <button
+          @click="triggerFileInput" type="button"
+          class="bg-green-600 text-white px-4 py-2 rounded text-[12px] font-medium hover:bg-green-500">
+          Upload Baru
+        </button>
+        <input 
+          type="file"
+          ref="fileInput"
+          class="hidden"
+          multiple
+          @change="handleUploadFile"
           >
-            <Download class="w-4 h-4" />
-          </button>
+      </div>
 
-          <!-- DELETE -->
-          <button
-            @click="deleteFile(file.uuid)"
-            class="text-red-600 hover:text-red-800 transition"
-          >
-            <Trash2 class="w-4 h-4" />
-          </button>
+      <div class="max-h-[300px] overflow-y-auto border rounded-lg p-3 bg-gray-50">
+        <div
+          v-for="file in filesLibrary"
+          :key="file.uuid"
+          class="flex items-center justify-between bg-white rounded-lg px-3 py-2 mb-2 hover:shadow-sm transition">
+
+          <div class="flex items-center gap-3">
+            <input
+              type="checkbox"
+              :value="file.uuid"
+              v-model="selectedFileUuids"
+              class="w-4 h-4"
+            />
+            
+            <span class="text-[13px] truncate max-w-[250px]">
+              {{ file.name }}
+            </span>
+          </div>
+
+          <div class="flex items-center gap-3">
+
+            <button
+              @click="downloadFile(file)"
+              class="text-blue-600 hover:text-blue-800 transition">
+              <Download class="w-4 h-4" />
+            </button>
+
+            <button
+              @click="deleteFile(file.uuid)"
+              class="text-red-600 hover:text-red-800 transition">
+              <Trash2 class="w-4 h-4" />
+            </button>
+          </div>
 
         </div>
 
       </div>
 
-    </div>
+      <div class="flex justify-end mt-4 gap-3">
+        <button
+          @click="showFileLibraryModal = false"
+          class="text-[12px] px-6 py-2 bg-red-700 text-white rounded hover:bg-red-600">
+          Batal
+        </button>
 
-    <!-- BUTTON PILIH -->
-    <div class="flex justify-end mt-4 gap-3">
-      <button
-        @click="showFileLibraryModal = false"
-        class="text-[12px] px-6 py-2 bg-red-700 text-white rounded hover:bg-red-600"
-      >
-        Batal
-      </button>
-      <button
-        @click="pilihFileLibrary"
-        class="text-[12px] px-6 py-2 bg-blue-900 text-white rounded hover:bg-blue-800"
-      >
-        Pilih
-      </button>
-    </div>
+        <button
+          @click="pilihFileLibrary"
+          class="text-[12px] px-6 py-2 bg-blue-900 text-white rounded hover:bg-blue-800">
+          Pilih
+        </button>
+      </div>
 
+    </div>
   </div>
-</div>
 
 
   </adminLayout>
