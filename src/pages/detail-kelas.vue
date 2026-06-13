@@ -6,7 +6,7 @@ import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
 // Service
-const { getSesiPengampu, getMahasiswaKelas, meta, getKelas } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, getKelas,getJadwalById, updateJadwal } = kelasService();
 
 // Router
 const route = useRoute();
@@ -30,6 +30,20 @@ const pesertaKelas = ref([]);
 const currentPage = ref(1);
 const searchPeserta = ref("");
 
+const detailKelas = ref({});
+
+const fetchDetailKelas = async () => {
+  try {
+    const data = await getKelas();
+
+    const kelas = data.find(k => k.id === classId);
+
+    detailKelas.value = kelas || {};
+  } catch (err) {
+    console.error("Gagal ambil detail kelas:", err);
+  }
+};
+
 // Fetch sesi pelajaran berdasarkan pengampuId
 const fetchSesiPelajaran = async () => {
   if (!pengampuId || !mataKuliahKode) return;
@@ -46,7 +60,7 @@ const fetchSesiPelajaran = async () => {
       .map(s => ({
         id: s.id,
         tanggal: s.session_date,
-        sesi: s.session_number,
+        number: s.session_number,
         materi: s.topic || "-",
         status: s.status === "closed" ? "Selesai" : s.status === "open" ? "Berjalan" : "Belum",
       }));
@@ -122,6 +136,7 @@ onMounted(() => {
   fetchSesiPelajaran();
   fetchPesertaKelas();
   fetchTotalMahasiswa();
+  fetchDetailKelas();
 });
 
 // Pagination
@@ -138,39 +153,59 @@ watch(search, async () => {
 //buka sesi perkuliahan
 const topikKelas = ref("");
 const showModal = ref(false);
-const selectedJadwal = ref(null)
+const selectedJadwal = ref({
+  id: "",
+  mataKuliah: "",
+  sessionNumber: "",
+});
 
-const openModal = (jadwal) => {
-  selectedJadwal.value = jadwal;
-  topikKelas.value = ""; // reset input
+const openModal = (sesi) => {
+  if (!sesi) return;
+
+  selectedJadwal.value = {
+    id: sesi.id,
+    mataKuliah: infoKelas.value.mataKuliah, // dari info kelas
+    number: sesi.number,
+    tanggal: sesi.tanggal
+  };
+
   showModal.value = true;
+};
+
+const bukaSesi = async () => {
+  try {
+    const payload = {
+      topic: topikKelas.value
+    };
+
+    const res = await updateJadwal(selectedJadwal.value.id, payload);
+
+    if (res?.success) {
+      console.log("✅ UPDATE BERHASIL");
+
+      // 🧭 INI YANG KAMU KURANG
+      router.push({
+        path: "/detail-sesi",
+        query: {
+          id: selectedJadwal.value.id
+        }
+      });
+
+      showModal.value = false;
+      topikKelas.value = "";
+    } else {
+      console.warn("❌ UPDATE GAGAL:", res);
+    }
+
+  } catch (error) {
+    console.error("❌ Gagal buka sesi:", error);
+  }
 };
 
 const closeModal = () => {
   showModal.value = false;
-  selectedJadwal.value = null;
+  selectedJadwal.value = "";
   topikKelas.value = "";
-};
-
-const bukaSesi = () => {
-  if (!topikKelas.value.trim()) {
-    alert("Topik kelas wajib diisi!");
-    return;
-  }
-
-  router.push({
-    path: "/detail-sesi",
-    query: {
-      id: selectedJadwal.value.id,
-      mataKuliah: selectedJadwal.value.materi,
-      kelas: selectedJadwal.value.kelas,
-      dosen: selectedJadwal.value.dosen,
-      jam: selectedJadwal.value.tanggal,
-      topik: topikKelas.value
-    }
-  });
-
-  closeModal();
 };
 
 // Jalankan fetch saat mounted
@@ -269,7 +304,7 @@ onMounted(() => {
           <tbody>
             <tr v-for="s in sesiList" :key="s.id" class="hover:bg-gray-50 border-b border-gray-300">
               <td class="p-2 text-center">{{ s.tanggal }}</td>
-              <td class="p-2 text-center">Sesi ke-{{ s.sesi }}</td>
+              <td class="p-2 text-center">Sesi ke-{{ s.number }}</td>
               <td class="p-2 text-center">{{ s.materi }}</td>
               <td class="p-2 text-center">
                 <span class="text-white px-4 py-1 rounded"
@@ -346,7 +381,7 @@ onMounted(() => {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div class="bg-white w-[480px] rounded-[8px] border border-blue-900 p-8 relative shadow-lg">
         <button
-          @click="closeModal"
+          @click="closeModal(s)"
           class="absolute top-4 right-4 text-black text-3xl"
         >
           ×
@@ -366,7 +401,7 @@ onMounted(() => {
           </h3>
 
           <p class="text-[11px] text-gray-400 mb-4">
-            Sesi 12
+             Sesi ke-{{ selectedJadwal.number }}
           </p>
 
           <label class="block text-[12px] font-medium mb-2">

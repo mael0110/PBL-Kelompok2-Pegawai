@@ -115,6 +115,9 @@ export function kelasService() {
         },
       }
     );
+    
+    console.log("🔥 RAW PRESENSI RESPONSE:", res);
+    console.log("🔥 RES.DATA:", res?.data);
 
     return res.data.data || [];
   } catch (error) {
@@ -198,6 +201,51 @@ async function getPresensiMahasiswa(sesiId) {
   }
 }
 
+async function getJadwalById(sesiId) {
+  const token = localStorage.getItem("token");
+    try {
+      const res = await axios.get(`https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${sesiId}`,{
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        params: {
+          sesi_id: sesiId,
+        },
+      }
+    );
+
+      return res.data.data;
+    } catch (error) {
+      console.log("Gagal ambil detail jadwal:", error.response?.data || error);
+      return null;
+    }
+  }
+
+ async function updateJadwal(sesiId, payload) {
+  const token = localStorage.getItem("token");
+    try {
+      const res = await axios.put(`https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${sesiId}`,
+      payload,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+        params: {
+          sesi_id: sesiId,
+        },
+      }
+    );
+
+    console.log("berhasil", res.data)
+      return res.data;
+    } catch (error) {
+      console.log("Gagal update jadwal:", error.response?.data || error);
+      throw error;
+    }
+  }
+
   return { 
     meta,
     getSesiPengampu, 
@@ -207,5 +255,7 @@ async function getPresensiMahasiswa(sesiId) {
     postPresensiMahasiswa,
     updatePresensiMahasiswa,
     getPresensiMahasiswa, 
+    getJadwalById,
+    updateJadwal
   };
 }

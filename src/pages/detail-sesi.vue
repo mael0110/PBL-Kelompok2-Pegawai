@@ -7,14 +7,16 @@ import { kelasService } from "../services/kelas";
 
 const route = useRoute();
 
+const mataKuliahKode = route.query.kode;
+const pengampuId = route.query.pengampuId;
+const classId = route.query.class_id;
+
 const {
   getMahasiswaKelas,
   postPresensiMahasiswa,
   updatePresensiMahasiswa,
-  getPresensiMahasiswa
+  getPresensiMahasiswa,
 } = kelasService();
-
-const classId = route.query.class_id;
 
 const searchMahasiswa = ref("");
 const daftarMahasiswa = ref([]);
@@ -52,6 +54,52 @@ const loadPresensi = async () => {
 
     if (!res) {
       console.log("Belum ada presensi");
+
+      const hadir = data.filter(m =>
+        m.status?.toLowerCase() === "hadir"
+      ).length;
+
+      const izin = data.filter(m =>
+        m.status?.toLowerCase() === "izin"
+      ).length;
+
+      const sakit = data.filter(m =>
+        m.status?.toLowerCase() === "sakit"
+      ).length;
+
+      const alpha = data.filter(m =>
+        m.status?.toLowerCase() === "alpha"
+      ).length;
+
+      totalMahasiswa.value = daftarMahasiswa.value.length;
+
+    ringkasanPresensi.value = [
+          {
+            label: "Hadir",
+            jumlah: hadir,
+            persen: `${Math.round((hadir / total) * 100)}%`,
+            color: "bg-green-500",
+          },
+          {
+            label: "Izin",
+            jumlah: izin,
+            persen: `${Math.round((izin / total) * 100)}%`,
+            color: "bg-yellow-400",
+          },
+          {
+            label: "Sakit",
+            jumlah: sakit,
+            persen: `${Math.round((sakit / total) * 100)}%`,
+            color: "bg-blue-300",
+          },
+          {
+            label: "Alpha",
+            jumlah: alpha,
+            persen: `${Math.round((alpha / total) * 100)}%`,
+            color: "bg-red-500",
+          },
+        ];
+
       return;
     }
 
@@ -90,6 +138,34 @@ onMounted(async () => {
   await loadMahasiswa();
   await loadPresensi();
 });
+
+const totalMahasiswa = ref(0);
+const ringkasanPresensi = ref([
+  {
+    label: "Hadir",
+    jumlah: 0,
+    persen: "0%",
+    color: "bg-green-500",
+  },
+  {
+    label: "Izin",
+    jumlah: 0,
+    persen: "0%",
+    color: "bg-yellow-400",
+  },
+  {
+    label: "Sakit",
+    jumlah: 0,
+    persen: "0%",
+    color: "bg-blue-300",
+  },
+  {
+    label: "Alpha",
+    jumlah: 0,
+    persen: "0%",
+    color: "bg-red-500",
+  },
+]);
 
 
 //post presensi
@@ -145,6 +221,7 @@ const ubahStatus = async (mahasiswa, statusBaru) => {
     const res = await updatePresensiMahasiswa(payload);
 
     console.log("Update berhasil:", res);
+    await loadPresensi();
   } catch (error) {
     console.error(
       "Gagal update presensi:",
@@ -185,32 +262,6 @@ const informasiSesi = {
   durasi: "240 menit",
 };
 
-const ringkasanPresensi = [
-  {
-    label: "Hadir",
-    jumlah: 21,
-    persen: "75%",
-    color: "bg-green-500",
-  },
-  {
-    label: "Izin",
-    jumlah: 3,
-    persen: "11%",
-    color: "bg-yellow-400",
-  },
-  {
-    label: "Sakit",
-    jumlah: 2,
-    persen: "7%",
-    color: "bg-blue-300",
-  },
-  {
-    label: "Alpha",
-    jumlah: 2,
-    persen: "7%",
-    color: "bg-red-500",
-  },
-];
 </script>
 
 <template>
@@ -227,8 +278,17 @@ const ringkasanPresensi = [
                     Kelas
                 </RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>
-                <RouterLink to="/detail-kelas" class="hover:underline">
-                    Detail Kelas
+                <RouterLink
+                  :to="{
+                    path: '/detail-kelas',
+                    query: {
+                      class_id: route.query.class_id,
+                      kode: route.query.kode,
+                      pengampuId: route.query.pengampuId
+                    }
+                  }"
+                >
+                  Detail Kelas
                 </RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>Detail Sesi
             </p>
@@ -312,7 +372,7 @@ const ringkasanPresensi = [
 
                 <div class="grid grid-cols-[1fr_60px] pt-5 text-[13px] font-semibold">
                     <p>Total Mahasiswa</p>
-                    <p>28</p>
+                    <p>{{ totalMahasiswa }}</p>
                 </div>
             </div>
         </div>
