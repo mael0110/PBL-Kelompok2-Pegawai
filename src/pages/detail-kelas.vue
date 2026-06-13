@@ -4,9 +4,11 @@ import { ref, onMounted, watch, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
+import { materiService} from "../services/materi.js";
 
 // Service
 const { getSesiPengampu, getMahasiswaKelas, meta, getKelas,getJadwalById, updateJadwal } = kelasService();
+const { tambahMateri, uploadedFiles } = materiService
 
 // Router
 const route = useRoute();
@@ -153,7 +155,7 @@ watch(search, async () => {
   await fetchSesiPelajaran(); // bisa pakai search jika endpoint mendukung filter
 });
 
-//buka sesi perkuliahan
+//pop up buka sesi perkuliahan
 const topikKelas = ref("");
 const showModal = ref(false);
 const selectedJadwal = ref({
@@ -215,6 +217,62 @@ const closeModal = () => {
 onMounted(() => {
   fetchPesertaKelas();
 });
+
+//pop up materi 
+const showMateriModal = ref(false);
+const judulMateri = ref("");
+const deskripsiMateri = ref("");
+const fileMateri = ref(null);
+
+const openMateriTab = () => {
+  console.log("🔥 MATERI DIKLIK");
+
+  activeTab.value = "materi";
+  showMateriModal.value = true;
+};
+
+const handleFile = (e) => {
+  fileMateri.value = e.target.files[0];
+};
+
+const handleFileUpload = (e) => {
+  const file = e.target.files[0];
+
+  if (!file) return;
+
+  uploadedFiles.value.push({
+    name: file.name,
+    file: file,
+    uuid: null // nanti kalau sudah upload ke backend
+  });
+};
+
+const submitMateri = async () => {
+  try {
+    const classSessionId = route.query.id;
+
+    const fileUuids = uploadedFiles.value.map(f => f.uuid);
+
+    if (fileUuids.length === 0) {
+      console.warn("⚠️ Tidak ada file yang diupload");
+      return;
+    }
+
+    const res = await tambahMateri(classSessionId, fileUuids);
+
+    if (res?.success) {
+      console.log("🎉 Materi berhasil disimpan");
+
+      showMateriModal.value = false;
+      judulMateri.value = "";
+      deskripsiMateri.value = "";
+      uploadedFiles.value = [];
+    }
+
+  } catch (error) {
+    console.error("❌ Gagal submit materi:", error);
+  }
+};
 </script>
 
 <template>
@@ -258,6 +316,20 @@ onMounted(() => {
         class="w-full text-left px-4 py-3 rounded-[6px]"
       >
         Sesi Pembelajaran
+      </button>
+      <button
+        @click="openMateriTab"
+        :class="activeTab === 'materi' ? 'bg-blue-900 text-white' : 'text-black'"
+        class="w-full text-left px-4 py-3 rounded-[6px]"
+      >
+        Materi Kuliah
+      </button>
+      <button
+        @click="activeTab = 'tugas'"
+        :class="activeTab === 'tugas' ? 'bg-blue-900 text-white' : 'text-black'"
+        class="w-full text-left px-4 py-3 rounded-[6px]"
+      >
+        Tugas Kuliah
       </button>
       <button
         @click="activeTab = 'peserta'"
@@ -441,5 +513,78 @@ onMounted(() => {
         </div>
       </div>
   </div>
+
+  <div
+    v-if="showMateriModal"
+    class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+  >
+    <div class="bg-white w-[420px] rounded-[10px] p-6 relative shadow-lg">
+
+      <!-- CLOSE -->
+      <button
+        @click="showMateriModal = false"
+        class="absolute top-3 right-4 text-[22px]"
+      >
+        ×
+      </button>
+
+      <h2 class="text-center text-[18px] font-semibold mb-4">
+        TAMBAH MATERI
+      </h2>
+
+      <!-- JUDUL -->
+      <label class="text-[13px]">Judul Materi</label>
+      <input
+        v-model="judulMateri"
+        type="text"
+        class="w-full border rounded px-3 py-2 mb-3 text-[13px]"
+      />
+
+      <!-- DESKRIPSI -->
+      <label class="text-[13px]">Deskripsi Materi</label>
+      <textarea
+        v-model="deskripsiMateri"
+        class="w-full border rounded px-3 py-2 mb-3 text-[13px]"
+      />
+
+      <!-- FILE -->
+      <label class="text-[13px]">File Materi"</label>
+      <input
+        type="file"
+        class="w-full border rounded px-3 py-2 text-[12px]"
+        @change="handleFileUpload"
+      />
+
+      <!-- BUTTON -->
+      <div class="flex justify-between mt-6">
+        <button
+          @click="showMateriModal = false"
+          class="px-6 py-2 border rounded text-blue-900"
+        >
+          Batal
+        </button>
+
+        <button
+          @click="submitMateri"
+          class="px-6 py-2 bg-blue-900 text-white rounded"
+        >
+          Simpan
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+<div v-if="uploadedFiles && uploadedFiles.length > 0">
+  <p class="text-[12px] font-semibold mb-2">File terupload:</p>
+
+  <div
+    v-for="(f, i) in uploadedFiles"
+    :key="i"
+    class="text-[12px] text-gray-600"
+  >
+    📎 {{ f.name }}
+  </div>
+</div>
 </adminLayout>
 </template>
