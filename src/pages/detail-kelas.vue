@@ -51,8 +51,11 @@ const fetchSesiPelajaran = async () => {
   try {
     console.log("DEBUG classId =", classId, "pengampuId =", pengampuId, "mataKuliahKode =", mataKuliahKode);
 
-    // Ambil semua sesi dari pengampu
-    const semuaSesi = await getSesiPengampu(pengampuId);
+    // SINKRONISASI: Kirim currentPage.value ke API (sesuaikan argumen fungsi service kamu)
+    const semuaSesi = await getSesiPengampu(pengampuId, currentPage.value);
+
+    console.log("isi meta langsung: ", meta)
+    console.log("isi dari meta.value: ", meta.value)
 
     // Filter sesuai kode mata kuliah
     sesiList.value = semuaSesi
@@ -320,8 +323,8 @@ onMounted(() => {
               </td>
             </tr>
           </tbody>
-
-          <div v-if="meta && meta.links" class="flex justify-center gap-2 mt-4">
+        </table>
+        <div v-if="meta && meta.links" class="flex justify-center gap-2 mt-4">
           <button
             v-for="(link, index) in meta.links"
             :key="index"
@@ -335,7 +338,6 @@ onMounted(() => {
             <span v-html="link.label"></span>
           </button>
         </div>
-        </table>
       </div>
 
       <!-- Pengajar & Peserta -->

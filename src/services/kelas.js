@@ -22,7 +22,7 @@ export function kelasService() {
       );
 
       console.log("Response API sesi pengampu:", res.data);
-      meta.value = res.data.data.meta;
+      meta.value = res.data.meta;
       return res.data.data || [];
 
     } catch (error) {
