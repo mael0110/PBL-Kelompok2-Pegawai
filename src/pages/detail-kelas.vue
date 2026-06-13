@@ -6,19 +6,21 @@ import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
 // Service
-const { getSesiPengampu, getMahasiswaKelas, meta, getKelas,getJadwalById, updateJadwal } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, getKelas, getJadwalById, updateJadwal } = kelasService();
 
 // Router
 const route = useRoute();
 const router = useRouter();
 
-// Tambahkan deklarasi search
+// Deklarasi search & pagination
 const search = ref("");
+const currentPage = ref(1);
+const searchPeserta = ref("");
 
-// Ambil query params: classId, kode matkul, dan pengampuId
-const classId = route.query.id || "";
-const mataKuliahKode = route.query.kode || "";
-const pengampuId = route.query.pengampuId || "";
+// State ID Kelas (Reactive)
+const classId = ref(route.query.class_id || route.query.classId || route.query.id || "");
+const mataKuliahKode = computed(() => route.query.kode || "");
+const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
 
 // Tab sidebar
 const activeTab = ref("informasi");
@@ -27,39 +29,41 @@ const activeTab = ref("informasi");
 const infoKelas = ref({});
 const sesiList = ref([]);
 const pesertaKelas = ref([]);
-const currentPage = ref(1);
-const searchPeserta = ref("");
-
 const detailKelas = ref({});
+const totalMahasiswa = ref(0);
+const topikKelas = ref("");
+const showModal = ref(false);
 
+const selectedJadwal = ref({
+  id: "",
+  mataKuliah: "",
+  sessionNumber: "",
+});
+
+// Fetch Detail Kelas
 const fetchDetailKelas = async () => {
+  if (!classId.value) return;
   try {
     const data = await getKelas();
-
-    const kelas = data.find(k => k.id === classId);
-
+    const kelas = data.find(k => k.id === classId.value);
     detailKelas.value = kelas || {};
   } catch (err) {
     console.error("Gagal ambil detail kelas:", err);
   }
 };
 
-// Fetch sesi pelajaran berdasarkan pengampuId
+// Fetch Sesi Pelajaran berdasarkan pengampuId
 const fetchSesiPelajaran = async () => {
-  if (!pengampuId || !mataKuliahKode) return;
+  if (!pengampuId.value || !mataKuliahKode.value) return;
 
   try {
-    console.log("DEBUG classId =", classId, "pengampuId =", pengampuId, "mataKuliahKode =", mataKuliahKode);
+    console.log("DEBUG classId =", classId.value, "pengampuId =", pengampuId.value, "mataKuliahKode =", mataKuliahKode.value);
 
-    // SINKRONISASI: Kirim currentPage.value ke API (sesuaikan argumen fungsi service kamu)
-    const semuaSesi = await getSesiPengampu(pengampuId, currentPage.value);
-
-    console.log("isi meta langsung: ", meta)
-    console.log("isi dari meta.value: ", meta.value)
+    const semuaSesi = await getSesiPengampu(pengampuId.value, currentPage.value);
 
     // Filter sesuai kode mata kuliah
     sesiList.value = semuaSesi
-      .filter(s => s.course_code === mataKuliahKode)
+      .filter(s => s.course_code === mataKuliahKode.value)
       .map(s => ({
         id: s.id,
         tanggal: s.session_date,
@@ -70,7 +74,7 @@ const fetchSesiPelajaran = async () => {
 
     // Ambil info kelas dari sesi pertama
     if (sesiList.value.length > 0) {
-      const first = semuaSesi.find(s => s.course_code === mataKuliahKode);
+      const first = semuaSesi.find(s => s.course_code === mataKuliahKode.value);
 
       infoKelas.value = {
         mataKuliah: first.course_name || "-",
@@ -86,33 +90,62 @@ const fetchSesiPelajaran = async () => {
         prodi: "-", 
         tahunAkademik: "-"
       };
-    }
 
+      // 🔥 BACKUP SAFETY: Jika classId di URL kosong, temukan dari data API Sesi ini
+      if (!classId.value && first.class_id) {
+        console.log("🔥 ClassID kosong di URL, memulihkan ClassID dari Sesi:", first.class_id);
+        classId.value = first.class_id;
+        // Panggil ulang fetch data yang butuh classId
+        fetchPesertaKelas();
+        fetchTotalMahasiswa();
+        fetchDetailKelas();
+      }
+    }
   } catch (err) {
     console.error("Gagal ambil sesi pelajaran:", err);
   }
 };
 
-// Fetch peserta kelas
+// Fetch Peserta Kelas
 const fetchPesertaKelas = async () => {
-  if (!classId) return;
+  if (!classId.value) {
+    console.warn("fetchPesertaKelas ditunda: classId masih kosong");
+    return;
+  }
 
   try {
-    const data = await getMahasiswaKelas(classId);
-    // flatten array mahasiswa (karena API sebelumnya pakai pivot)
-    pesertaKelas.value = data.flatMap(item =>
-      item.mahasiswa.map(m => ({
-        id: m.mahasiswa_id,
-        nama: m.name,
-        email: m.email,
-      }))
-    );
+    const data = await getMahasiswaKelas(classId.value);
+    if (data && Array.isArray(data)) {
+      pesertaKelas.value = data.flatMap(item => {
+        if (item.mahasiswa && Array.isArray(item.mahasiswa)) {
+          return item.mahasiswa.map(m => ({
+            id: m.mahasiswa_id,
+            nama: m.name,
+            email: m.email,
+          }));
+        }
+        return [];
+      });
+      console.log("Daftar peserta berhasil dimuat:", pesertaKelas.value);
+    }
   } catch (error) {
     console.error("Gagal ambil peserta kelas:", error);
   }
 };
 
-//filter
+// Total Mahasiswa
+const fetchTotalMahasiswa = async () => {
+  if (!classId.value) return;
+  try {
+    const data = await getKelas();
+    const kelasData = data.find(k => k.id === classId.value);
+    totalMahasiswa.value = kelasData?.total_mahasiswa || 0;
+  } catch (err) {
+    console.error("Gagal ambil total mahasiswa:", err);
+  }
+};
+
+// Filter Peserta Berdasarkan Input Search
 const filteredPeserta = computed(() => {
   if (!searchPeserta.value) return pesertaKelas.value;
   return pesertaKelas.value.filter(p =>
@@ -120,21 +153,7 @@ const filteredPeserta = computed(() => {
   );
 });
 
-//total mhs
-const totalMahasiswa = ref(0);
-
-const fetchTotalMahasiswa = async () => {
-  try {
-    const data = await getKelas();
-    // Cari kelas berdasarkan classId
-    const kelasData = data.find(k => k.id === classId);
-    totalMahasiswa.value = kelasData?.total_mahasiswa || 0;
-  } catch (err) {
-    console.error("Gagal ambil total mahasiswa:", err);
-  }
-};
-
-// Jalankan fetch saat mounted
+// Jalankan seluruh fetch saat pertama kali halaman dibuka
 onMounted(() => {
   fetchSesiPelajaran();
   fetchPesertaKelas();
@@ -142,32 +161,37 @@ onMounted(() => {
   fetchDetailKelas();
 });
 
+// Pantau jika ada perubahan parameter URL saat navigasi terjadi
+watch(
+  () => [route.query.class_id, route.query.classId, route.query.id],
+  () => {
+    classId.value = route.query.class_id || route.query.classId || route.query.id || "";
+    fetchSesiPelajaran();
+    fetchPesertaKelas();
+    fetchTotalMahasiswa();
+    fetchDetailKelas();
+  },
+  { deep: true }
+);
+
 // Pagination
 const goPage = async (page) => {
   currentPage.value = page;
-  await fetchSesiPelajaran(); // panggil fetch ulang sesuai page jika endpoint mendukung query page
+  await fetchSesiPelajaran();
 };
 
 watch(search, async () => {
   currentPage.value = 1;
-  await fetchSesiPelajaran(); // bisa pakai search jika endpoint mendukung filter
+  await fetchSesiPelajaran();
 });
 
-//pop up buka sesi perkuliahan
-const topikKelas = ref("");
-const showModal = ref(false);
-const selectedJadwal = ref({
-  id: "",
-  mataKuliah: "",
-  sessionNumber: "",
-});
-
+// Modal Actions
 const openModal = (sesi) => {
   if (!sesi) return;
 
   selectedJadwal.value = {
     id: sesi.id,
-    mataKuliah: infoKelas.value.mataKuliah, // dari info kelas
+    mataKuliah: infoKelas.value.mataKuliah,
     number: sesi.number,
     tanggal: sesi.tanggal
   };
@@ -177,22 +201,20 @@ const openModal = (sesi) => {
 
 const bukaSesi = async () => {
   try {
-    const payload = {
-      topic: topikKelas.value
-    };
-
+    const payload = { topic: topikKelas.value };
     const res = await updateJadwal(selectedJadwal.value.id, payload);
 
     if (res?.success) {
       console.log("✅ UPDATE BERHASIL");
 
-      // 🔥 PERBAIKAN DI SINI: Kirimkan juga pengampuId dan kode matkul ke halaman detail-sesi
       router.push({
         path: "/detail-sesi",
         query: {
           id: selectedJadwal.value.id,
-          pengampuId: route.query.pengampuId || pengampuId, // <-- Ditambahkan
-          kode: route.query.kode || mataKuliahKode         // <-- Ditambahkan
+          class_id: classId.value,
+          classId: classId.value,
+          pengampuId: pengampuId.value,
+          kode: mataKuliahKode.value
         }
       });
 
@@ -208,14 +230,9 @@ const bukaSesi = async () => {
 
 const closeModal = () => {
   showModal.value = false;
-  selectedJadwal.value = "";
+  selectedJadwal.value = { id: "", mataKuliah: "", sessionNumber: "" };
   topikKelas.value = "";
 };
-
-// Jalankan fetch saat mounted
-onMounted(() => {
-  fetchPesertaKelas();
-});
 </script>
 
 <template>
@@ -244,7 +261,6 @@ onMounted(() => {
   </div>
 
   <div class="bg-gray-100 min-h-screen flex gap-4 mt-4">
-    <!-- Sidebar -->
     <div class="bg-white p-3 w-[230px] rounded shadow text-[12px]">
       <button
         @click="activeTab = 'informasi'"
@@ -269,9 +285,7 @@ onMounted(() => {
       </button>
     </div>
 
-    <!-- Konten -->
     <div class="flex-1 space-y-4">
-      <!-- Informasi Kelas -->
       <div v-if="activeTab === 'informasi'" class="bg-white p-4 rounded shadow text-[12px]">
         <h2 class="font-semibold text-[15px] mb-3">Informasi Kelas</h2>
         <div class="grid grid-cols-4 gap-y-3">
@@ -284,13 +298,10 @@ onMounted(() => {
           <p>Dosen</p><p>{{ infoKelas.dosen }}</p>
           <p>Hari</p><p>{{ infoKelas.hari }}</p>
           <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
-          <!-- <p>Ruangan</p><p>{{ infoKelas.ruangan }}</p> -->
-          <p>Tahun Akademik</p><p>{{ infoKelas.tahunAkademik }}</p>
-          <!-- <p>Peserta</p><p>{{ infoKelas.peserta }}</p> -->
+          <p>Tahun Academic</p><p>{{ infoKelas.tahunAkademik }}</p>
         </div>
       </div>
 
-      <!-- Sesi Pembelajaran -->
       <div v-else-if="activeTab === 'sesi'" class="bg-white p-4 rounded shadow text-[12px]">
         <div class="flex justify-between items-center mb-3">
           <h2 class="font-semibold text-[15px]">Sesi Pembelajaran</h2>
@@ -325,6 +336,7 @@ onMounted(() => {
             </tr>
           </tbody>
         </table>
+        
         <div v-if="meta && meta.links" class="flex justify-center gap-2 mt-4">
           <button
             v-for="(link, index) in meta.links"
@@ -332,16 +344,13 @@ onMounted(() => {
             :disabled="!link.url || !link.page"
             @click="goPage(link.page)"
             class="px-3 py-1 rounded border text-sm"
-            :class="link.active
-              ? 'bg-blue-900 text-white'
-              : 'bg-white text-blue-900 hover:bg-blue-100'"
+            :class="link.active ? 'bg-blue-900 text-white' : 'bg-white text-blue-900 hover:bg-blue-100'"
           >
             <span v-html="link.label"></span>
           </button>
         </div>
       </div>
 
-      <!-- Pengajar & Peserta -->
       <div v-else-if="activeTab === 'peserta'" class="space-y-3">
         <div class="bg-white p-4 rounded shadow">
           <h2 class="font-semibold text-[14px] mb-2">Dosen Pengajar</h2>
@@ -370,8 +379,11 @@ onMounted(() => {
               </div>
               <div>
                 <h3 class="text-[12px] font-normal">{{ p.nama }}</h3>
-                <p class="text-[11px] text-gray-500">{{ p.nim }}</p>
+                <p class="text-[11px] text-gray-500">{{ p.email }}</p>
               </div>
+            </div>
+            <div v-if="filteredPeserta.length === 0" class="text-center text-gray-400 text-[12px] py-4">
+              Mahasiswa tidak ditemukan atau belum dimuat.
             </div>
           </div>
         </div>
@@ -379,38 +391,20 @@ onMounted(() => {
     </div>
   </div>
 
-  <div
-      v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+  <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div class="bg-white w-[480px] rounded-[8px] border border-blue-900 p-8 relative shadow-lg">
-        <button
-          @click="closeModal(s)"
-          class="absolute top-4 right-4 text-black text-3xl"
-        >
-          ×
-        </button>
+        <button @click="closeModal" class="absolute top-4 right-4 text-black text-3xl">×</button>
 
         <div class="flex justify-center mb-3">
           <CalendarClock class="w-16 h-16" />
         </div>
 
-        <h2 class="text-center text-[22px] font-bold mb-5">
-          Buka Sesi Perkuliahan
-        </h2>
+        <h2 class="text-center text-[22px] font-bold mb-5">Buka Sesi Perkuliahan</h2>
 
         <div class="border border-blue-100 rounded-[8px] shadow-md p-5 mb-5 w-[340px] mx-auto">
-          <h3 class="font-bold text-[15px] mb-1">
-            {{ selectedJadwal.mataKuliah }}
-          </h3>
-
-          <p class="text-[11px] text-gray-400 mb-4">
-             Sesi ke-{{ selectedJadwal.number }}
-          </p>
-
-          <label class="block text-[12px] font-medium mb-2">
-            Topik Kelas
-          </label>
-
+          <h3 class="font-bold text-[15px] mb-1">{{ selectedJadwal.mataKuliah }}</h3>
+          <p class="text-[11px] text-gray-400 mb-4">Sesi ke-{{ selectedJadwal.number }}</p>
+          <label class="block text-[12px] font-medium mb-2">Topik Kelas</label>
           <input
             v-model="topikKelas"
             type="text"
@@ -419,29 +413,14 @@ onMounted(() => {
           />
         </div>
 
-        <h3 class="text-center text-[15px] font-semibold mb-2">
-          Apakah Anda yakin ingin membuka sesi perkuliahan?
-        </h3>
-
-        <p class="text-center text-[12px] text-gray-600 mb-8">
-          Mahasiswa dapat melakukan presensi<br />
-          setelah sesi dibuka.
-        </p>
+        <h3 class="text-center text-[15px] font-semibold mb-2">Apakah Anda yakin ingin membuka sesi perkuliahan?</h3>
+        <p class="text-center text-[12px] text-gray-600 mb-8">Mahasiswa dapat melakukan presensi<br />setelah sesi dibuka.</p>
 
         <div class="flex gap-8">
-          <button
-            @click="closeModal"
-            class="w-full border border-blue-900 text-blue-900 font-semibold py-2 rounded-[5px]">
-            Batal
-          </button>
-
-          <button @click="bukaSesi"
-            class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[5px]">
-            Buka Sesi
-          </button>
+          <button @click="closeModal" class="w-full border border-blue-900 text-blue-900 font-semibold py-2 rounded-[5px]">Batal</button>
+          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[5px]">Buka Sesi</button>
         </div>
       </div>
   </div>
-
 </adminLayout>
 </template>

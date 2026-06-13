@@ -29,7 +29,7 @@ const {
   hapusMateri,
   tambahTugas,
   hapusTugas,
-  getMahasiswaMengumpulTugas // Destructure fungsi baru dari materiService
+  getMahasiswaMengumpulTugas 
 } = materiService();
 
 const searchMahasiswa = ref("");
@@ -94,7 +94,7 @@ const formatBytes = (bytes, decimals = 2) => {
 // Helper mencari nama mahasiswa berdasarkan student_id dari daftarMahasiswa yang sudah di-load
 const getNamaMahasiswa = (studentId) => {
   const mhs = daftarMahasiswa.value.find(m => m.id === studentId);
-  return mhs ? mhs.nama : "Nama Tidak Demaun";
+  return mhs ? mhs.nama : "Nama Tidak Ditemukan";
 };
 
 // ==========================================
@@ -111,7 +111,11 @@ const fetchMateri = async () => {
 
   try {
     const semuaSesi = await getSesiPengampu(idPengampu);
-    const sesiAktif = semuaSesi.find(sesi => sesi.id === currentSesiId);
+    // Sinkronisasi: Baca data dari tatatata susunan index pertama jika backend membungkus dalam array
+    const dataSesiRaw = semuaSesi?.data || semuaSesi;
+    const sesiAktif = Array.isArray(dataSesiRaw) 
+      ? dataSesiRaw.find(sesi => sesi.id === currentSesiId)
+      : dataSesiRaw;
 
     if (sesiAktif && sesiAktif.learning_materials) {
       materiList.value = sesiAktif.learning_materials.map(material => ({
@@ -141,13 +145,16 @@ const fetchTugas = async () => {
 
   try {
     const semuaSesi = await getSesiPengampu(idPengampu);
-    const sesiAktif = semuaSesi.find(sesi => sesi.id === currentSesiId);
+    const dataSesiRaw = semuaSesi?.data || semuaSesi;
+    const sesiAktif = Array.isArray(dataSesiRaw) 
+      ? dataSesiRaw.find(sesi => sesi.id === currentSesiId)
+      : dataSesiRaw;
 
     if (sesiAktif && sesiAktif.assignments) {
       tugasList.value = sesiAktif.assignments.map(tugas => {
         let taskFiles = [];
-        if (tugas.learning_materials) {
-          taskFiles = tugas.learning_materials.map(m => ({
+        if (tugas.attachment) {
+          taskFiles = tugas.attachment.map(m => ({
             uuid: m.id,
             name: m.original_file_name
           }));
@@ -192,11 +199,6 @@ const bukaPopupSubmission = async (tugas) => {
     loadingSubmission.value = false;
   }
 };
-
-onMounted(() => {
-  fetchMateri();
-  fetchTugas();
-});
 
 // ==========================================
 // ACTIONS (POST MATERI & TUGAS)
@@ -291,6 +293,7 @@ const onHapusTugas = async (assignmentId) => {
     }
   } catch (error) {
     console.error(error);
+    alert("Gagal menghapus tugas.");
   }
 };
 
@@ -370,6 +373,7 @@ const downloadFile = async (file) => {
     window.URL.revokeObjectURL(blobUrl);
   } catch (err) {
     console.error(err);
+    alert("Gagal mendownload file.");
   }
 };
 
@@ -393,9 +397,9 @@ const loadMahasiswa = async () => {
   try {
     const res = await getMahasiswaKelas(classId);
     daftarMahasiswa.value = res.map((item) => ({
-      id: item.mahasiswa?.[0]?.mahasiswa_id,
-      nama: item.mahasiswa?.[0]?.name,
-      email: item.mahasiswa?.[0]?.email,
+      id: item.mahasiswa?.[0]?.mahasiswa_id || item.mahasiswa_id,
+      nama: item.mahasiswa?.[0]?.name || item.name,
+      email: item.mahasiswa?.[0]?.email || item.email,
       status: "",
     }));
   } catch (error) {
@@ -421,6 +425,8 @@ const loadPresensi = async () => {
 onMounted(async () => {
   await loadMahasiswa();
   await loadPresensi();
+  await fetchMateri();
+  await fetchTugas();
 });
 
 const filteredMahasiswa = computed(() => {
@@ -471,7 +477,7 @@ const tutupSesi = () => { console.log("Sesi ditutup"); };
                 <span class="mx-2 text-gr">&gt;</span>
                 <RouterLink to="/Kelas" class="hover:underline">Kelas</RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>
-                <RouterLink :to="{ path: '/detail-kelas', query: { class_id: route.query.class_id, kode: route.query.kode, pengampuId: route.query.pengampuId } }" class="hover:underline">Detail Kelas</RouterLink>
+                <RouterLink :to="{ path: '/detail-kelas', query: { classId: route.query.class_id || route.query.classId, kode: route.query.kode, pengampuId: route.query.pengampuId || route.query.pengampu_id} }" class="hover:underline">Detail Kelas</RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>Detail Sesi
             </p>
             <h1 class="text-[20px] font-semibold mb-3">Detail Sesi</h1>
@@ -497,7 +503,7 @@ const tutupSesi = () => { console.log("Sesi ditutup"); };
               <p class="font-semibold text-slate-800">{{ m.title || "Tanpa Judul" }}</p>
               <p class="text-gray-500">{{ m.description || "-" }}</p>
               
-              <div v-if="m.files && m.files.length" class="flex justify-between items-center bg-gray-50 p-2 border rounded mt-2">
+              <div v-if="m.files && m.files.length" class="flex justify-between items-center bg-gray-50 p-2 border border-solid border-gray-300 rounded mt-2">
                 <div class="flex items-center gap-2 truncate max-w-[200px]">
                   <span class="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase shrink-0">
                     {{ getFileExtension(m.files[0].name) }}
@@ -543,7 +549,7 @@ const tutupSesi = () => { console.log("Sesi ditutup"); };
               </div>
 
               <div v-if="t.files && t.files.length" class="mt-2 space-y-2">
-                <div v-for="(file, fIdx) in t.files" :key="fIdx" class="flex justify-between items-center bg-gray-50 p-2 border rounded mt-2">
+                <div v-for="(file, fIdx) in t.files" :key="fIdx" class="flex justify-between items-center bg-gray-50 p-2 border border-solid border-gray-300 rounded mt-2">
                   <div class="flex items-center gap-2 truncate max-w-[200px]">
                     <span class="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-1.5 py-0.5 rounded uppercase shrink-0">
                       {{ getFileExtension(file.name) }}
@@ -599,15 +605,20 @@ const tutupSesi = () => { console.log("Sesi ditutup"); };
                   {{ sub.submitted_at }}
                 </td>
                 <td class="p-3">
-                  <div v-if="sub.attachment && sub.attachment.length">
-                    <div v-for="file in sub.attachment" :key="file.id" class="flex items-center justify-between bg-slate-50 border p-1.5 rounded text-[11px] max-w-xs gap-2">
-                      <div class="truncate flex flex-col">
-                        <span class="font-medium text-blue-900 truncate" :title="file.original_file_name">
-                          {{ file.original_file_name }}
+                  <div v-if="sub.attachment && sub.attachment.length" class="space-y-1.5">
+                    <div v-for="file in sub.attachment" :key="file.id" class="flex items-center justify-between bg-white border border-solid border-gray-300 p-2 rounded text-[11px] max-w-xs gap-3 shadow-sm">
+                      <div class="truncate flex items-center gap-2">
+                        <span class="bg-emerald-100 text-emerald-800 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase shrink-0">
+                          {{ getFileExtension(file.original_file_name) }}
                         </span>
-                        <span class="text-[9px] text-gray-400">{{ formatBytes(file.file_size) }}</span>
+                        <div class="truncate flex flex-col">
+                          <span class="font-medium text-blue-900 truncate" :title="file.original_file_name">
+                            {{ file.original_file_name }}
+                          </span>
+                          <span class="text-[9px] text-gray-400">{{ formatBytes(file.file_size) }}</span>
+                        </div>
                       </div>
-                      <button @click="downloadFile(file)" type="button" class="text-blue-600 hover:text-blue-800 p-1 rounded hover:bg-blue-100 shrink-0 transition" title="Unduh Tugas">
+                      <button @click="downloadFile(file)" type="button" class="text-blue-600 hover:text-white p-1.5 rounded hover:bg-blue-600 border border-blue-200 transition shrink-0" title="Unduh Tugas">
                         <Download class="w-3.5 h-3.5" />
                       </button>
                     </div>
