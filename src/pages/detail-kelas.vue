@@ -2,11 +2,11 @@
 import adminLayout from "./adminLayout.vue";
 import { ref, onMounted, watch, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
+import { User, Clock, Users, UserRound } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
 // Service
-const { getSesiPengampu, getMahasiswaKelas, meta, getKelas, getJadwalById, updateJadwal } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, getKelas } = kelasService();
 
 // Router
 const route = useRoute();
@@ -31,14 +31,6 @@ const sesiList = ref([]);
 const pesertaKelas = ref([]);
 const detailKelas = ref({});
 const totalMahasiswa = ref(0);
-const topikKelas = ref("");
-const showModal = ref(false);
-
-const selectedJadwal = ref({
-  id: "",
-  mataKuliah: "",
-  sessionNumber: "",
-});
 
 // Fetch Detail Kelas
 const fetchDetailKelas = async () => {
@@ -69,7 +61,7 @@ const fetchSesiPelajaran = async () => {
         tanggal: s.session_date,
         number: s.session_number,
         materi: s.topic || "-",
-        status: s.status === "closed" ? "Selesai" : s.status === "open" ? "Berjalan" : "Belum",
+        status: s.status === "closed" ? "Selesai" : s.status === "open" ? "Berjalan" : "Terjadwal",
       }));
 
     // Ambil info kelas dari sesi pertama
@@ -185,53 +177,20 @@ watch(search, async () => {
   await fetchSesiPelajaran();
 });
 
-// Modal Actions
-const openModal = (sesi) => {
+// Navigasi Langsung Masuk ke Detail Sesi (Tanpa Pop-up)
+const masukSesi = (sesi) => {
   if (!sesi) return;
 
-  selectedJadwal.value = {
-    id: sesi.id,
-    mataKuliah: infoKelas.value.mataKuliah,
-    number: sesi.number,
-    tanggal: sesi.tanggal
-  };
-
-  showModal.value = true;
-};
-
-const bukaSesi = async () => {
-  try {
-    const payload = { topic: topikKelas.value };
-    const res = await updateJadwal(selectedJadwal.value.id, payload);
-
-    if (res?.success) {
-      console.log("✅ UPDATE BERHASIL");
-
-      router.push({
-        path: "/detail-sesi",
-        query: {
-          id: selectedJadwal.value.id,
-          class_id: classId.value,
-          classId: classId.value,
-          pengampuId: pengampuId.value,
-          kode: mataKuliahKode.value
-        }
-      });
-
-      showModal.value = false;
-      topikKelas.value = "";
-    } else {
-      console.warn("❌ UPDATE GAGAL:", res);
+  router.push({
+    path: "/detail-sesi",
+    query: {
+      id: sesi.id,
+      class_id: classId.value,
+      classId: classId.value,
+      pengampuId: pengampuId.value,
+      kode: mataKuliahKode.value
     }
-  } catch (error) {
-    console.error("❌ Gagal buka sesi:", error);
-  }
-};
-
-const closeModal = () => {
-  showModal.value = false;
-  selectedJadwal.value = { id: "", mataKuliah: "", sessionNumber: "" };
-  topikKelas.value = "";
+  });
 };
 </script>
 
@@ -323,14 +282,14 @@ const closeModal = () => {
               <td class="p-2 text-center">{{ s.materi }}</td>
               <td class="p-2 text-center">
                 <span class="text-white px-4 py-1 rounded"
-                      :class="s.status === 'Selesai' ? 'bg-green-600' : 'bg-blue-900'">
+                      :class="s.status === 'Selesai' ? 'bg-green-600' : s.status === 'Berjalan' ? 'bg-orange-500' : 'bg-blue-900'">
                   {{ s.status }}
                 </span>
               </td>
               <td class="p-2 text-center">
-                <button @click="openModal(s)"
+                <button @click="masukSesi(s)"
                         class="border border-blue-900 text-blue-900 px-4 py-1 rounded hover:bg-blue-900 hover:text-white transition">
-                  Buka Sesi
+                  {{ s.status === 'Selesai' ? 'Lihat Sesi' : 'Masuk Sesi' }}
                 </button>
               </td>
             </tr>
@@ -389,38 +348,6 @@ const closeModal = () => {
         </div>
       </div>
     </div>
-  </div>
-
-  <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div class="bg-white w-[480px] rounded-[8px] border border-blue-900 p-8 relative shadow-lg">
-        <button @click="closeModal" class="absolute top-4 right-4 text-black text-3xl">×</button>
-
-        <div class="flex justify-center mb-3">
-          <CalendarClock class="w-16 h-16" />
-        </div>
-
-        <h2 class="text-center text-[22px] font-bold mb-5">Buka Sesi Perkuliahan</h2>
-
-        <div class="border border-blue-100 rounded-[8px] shadow-md p-5 mb-5 w-[340px] mx-auto">
-          <h3 class="font-bold text-[15px] mb-1">{{ selectedJadwal.mataKuliah }}</h3>
-          <p class="text-[11px] text-gray-400 mb-4">Sesi ke-{{ selectedJadwal.number }}</p>
-          <label class="block text-[12px] font-medium mb-2">Topik Kelas</label>
-          <input
-            v-model="topikKelas"
-            type="text"
-            placeholder="Masukkan topik kelas"
-            class="w-full border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-blue-900"
-          />
-        </div>
-
-        <h3 class="text-center text-[15px] font-semibold mb-2">Apakah Anda yakin ingin membuka sesi perkuliahan?</h3>
-        <p class="text-center text-[12px] text-gray-600 mb-8">Mahasiswa dapat melakukan presensi<br />setelah sesi dibuka.</p>
-
-        <div class="flex gap-8">
-          <button @click="closeModal" class="w-full border border-blue-900 text-blue-900 font-semibold py-2 rounded-[5px]">Batal</button>
-          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[5px]">Buka Sesi</button>
-        </div>
-      </div>
   </div>
 </adminLayout>
 </template>

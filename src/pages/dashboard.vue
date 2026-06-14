@@ -9,7 +9,8 @@ import { kelasService } from "../services/kelas";
 const router = useRouter();
 
 const { presensiDosen } = presensiService();
-const { getSesiPengampu } = kelasService();
+// Mengganti getSesiPengampu menjadi getAllSesiDosen sesuai service Anda
+const { getAllSesiDosen } = kelasService();
 
 // Tanggal hari ini
 const today = new Date();
@@ -58,8 +59,8 @@ const fetchSesiKalender = async () => {
     listSemuaSesi.value = []; 
     let tempCombinedData = [];
 
-    // 1. Ambil Halaman Pertama
-    const firstPageResult = await getSesiPengampu(null, 1);
+    // 1. Ambil Halaman Pertama menggunakan getAllSesiDosen
+    const firstPageResult = await getAllSesiDosen(null, 1);
     
     if (firstPageResult && firstPageResult.success) {
       const dataHalaman1 = firstPageResult.data || [];
@@ -69,7 +70,7 @@ const fetchSesiKalender = async () => {
 
       // 2. Looping Ambil Halaman Sisa
       for (let currentPage = 2; currentPage <= lastPage; currentPage++) {
-        const nextPageResult = await getSesiPengampu(null, currentPage);
+        const nextPageResult = await getAllSesiDosen(null, currentPage);
         if (nextPageResult && nextPageResult.success) {
           const dataHalamanSisa = nextPageResult.data || [];
           tempCombinedData = [...tempCombinedData, ...dataHalamanSisa];
@@ -158,38 +159,6 @@ const navigasiKeDetailSesi = (sesi) => {
       pengampuId: sesi.pengampu_id,
       kode: sesi.course_code
     }
-  });
-};
-
-// Logika Modal Sesi Atas (Sekarang diarahkan langsung lewat navigasiKeDetailSesi)
-const topikKelas = ref("");
-const showModal = ref(false);
-const selectedJadwal = ref(null);
-
-const openModal = (item) => {
-  selectedJadwal.value = item;
-  showModal.value = true;
-};
-
-const closeModal = () => {
-  showModal.value = false;
-  topikKelas.value = "";
-};
-
-const bukaSesi = () => {
-  if (!topikKelas.value.trim()) {
-    alert("Topik kelas wajib diisi");
-    return;
-  }
-  router.push({
-    path: "/detail-sesi",
-    query: {
-      mataKuliah: selectedJadwal.value.course_name,
-      kelas: selectedJadwal.value.class_name,
-      dosen: "Dosen Pengampu",
-      jam: `${selectedJadwal.value.start_time} - ${selectedJadwal.value.end_time}`,
-      topik: topikKelas.value,
-    },
   });
 };
 
@@ -341,7 +310,7 @@ onMounted(() => {
               </div>
 
               <p class="text-[12px] font-bold text-gray-700 text-right">{{ item.jumlah }}</p>
-              <p class="text-[11px] font-medium text-gray-400 text-right">{{ item.persen }}</p>
+              <p class="text-[11px] font-medium text-gray-400 text-right">{{ item.percent }}</p>
             </div>
           </div>
         </div>

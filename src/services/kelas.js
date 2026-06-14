@@ -4,32 +4,32 @@ import {ref} from "vue";
 export function kelasService() {
   const meta = ref({});
 
-  // async function getSesiPengampu(pengampuId, page = 1) {
-  //   const token = localStorage.getItem("token");
+  async function getSesiPengampu(pengampuId, page = 1) {
+    const token = localStorage.getItem("token");
 
-  //   try {
-  //     const res = await axios.get(
-  //       `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
-  //       {
-  //         params: {
-  //           page
-  //         },
-  //         headers: {
-  //           Authorization: `Bearer ${token}`,
-  //           Accept: "application/json",
-  //         },
-  //       }
-  //     );
+    try {
+      const res = await axios.get(
+        `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
+        {
+          params: {
+            page
+          },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
 
-  //     console.log("Response API sesi pengampu:", res.data);
-  //     meta.value = res.data.meta;
-  //     return res.data.data || [];
+      console.log("Response API sesi pengampu:", res.data);
+      meta.value = res.data.meta;
+      return res.data.data || [];
 
-  //   } catch (error) {
-  //     console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
-  //     return [];
-  //   }
-  // }
+    } catch (error) {
+      console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
+      return [];
+    }
+  }
 
   async function getKelas() {
     const token = localStorage.getItem("token");
@@ -246,8 +246,7 @@ async function getJadwalById(sesiId) {
     }
   }
 
-  // Ganti fungsi getSesiPengampu di dalam kelas.js kamu
-async function getSesiPengampu(pengampuId = null, page = 1) {
+async function getAllSesiDosen(pengampuId = null, page = 1) {
   const token = localStorage.getItem("token");
 
   try {
@@ -285,6 +284,6 @@ async function getSesiPengampu(pengampuId = null, page = 1) {
     getPresensiMahasiswa, 
     getJadwalById,
     updateJadwal,
-    // getaAllSesiDosen
+    getAllSesiDosen
   };
 }
