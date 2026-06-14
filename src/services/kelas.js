@@ -225,16 +225,15 @@ async function getJadwalById(sesiId) {
  async function updateJadwal(sesiId, payload) {
   const token = localStorage.getItem("token");
     try {
-      const res = await axios.put(`https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${sesiId}`,
-      payload,
+      const res = await axios.put(`https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${sesiId}`,payload,
       {
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: "application/json",
         },
-        params: {
-          sesi_id: sesiId,
-        },
+        // params: {
+        //   sesi_id: sesiId,
+        // },
       }
     );
 

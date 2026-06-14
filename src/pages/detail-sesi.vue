@@ -5,6 +5,7 @@ import { Search, UserRound, Download, Trash2, Eye, ClipboardCheck } from "lucide
 import { ref, computed, onMounted, reactive } from "vue";
 import { kelasService } from "../services/kelas";
 import { materiService } from "../services/materi.js";
+import axios from "axios"; 
 
 const route = useRoute();
 const router = useRouter();
@@ -19,7 +20,6 @@ const {
   postPresensiMahasiswa,
   updatePresensiMahasiswa,
   getPresensiMahasiswa,
-  updateJadwal // Ambil fungsi updateJadwal dari kelasService
 } = kelasService();
 
 const { 
@@ -38,6 +38,9 @@ const {
 const searchMahasiswa = ref("");
 const daftarMahasiswa = ref([]);
 const showQrModal = ref(false);
+
+// State untuk mendeteksi apakah di database sudah ada data absen untuk sesi ini
+const sudahAdaPresensi = ref(false);
 
 // ==========================================
 // STATE MANAGEMENT (MATERI, TUGAS & LIBRARY)
@@ -118,7 +121,6 @@ const fetchMateri = async () => {
 
   try {
     const semuaSesi = await getSesiPengampu(idPengampu);
-    // Sinkronisasi: Baca data dari tatatata susunan index pertama jika backend membungkus dalam array
     const dataSesiRaw = semuaSesi?.data || semuaSesi;
     const sesiAktif = Array.isArray(dataSesiRaw) 
       ? dataSesiRaw.find(sesi => sesi.id === currentSesiId)
@@ -256,15 +258,13 @@ const submitTugas = async () => {
   }
 
   try {
-    // FORMATTING VALIDASI DEADLINE 422: Mengubah format "YYYY-MM-DDTHH:mm" menjadi "YYYY-MM-DD HH:mm"
     const deadlineDiformat = formTugas.deadline.replace('T', ' ');
 
-    // Susun payload sesuai dengan dokumentasi data model backend Anda
     const payload = {
       title: formTugas.title,
       description: formTugas.description,
       deadline: deadlineDiformat,
-      file_uuids: fileUuids.value // Menyertakan uuid file pendukung yang dipilih dari media library
+      file_uuids: fileUuids.value 
     };
 
     const idSesiTarget = route.query.id || sesiId;
@@ -273,7 +273,6 @@ const submitTugas = async () => {
     if (res?.success || res?.code === 200 || res?.status === 201 || res?.status === 200) {
       alert("Tugas baru berhasil ditambahkan!");
       
-      // Reset form dan state media picker
       formTugas.title = "";
       formTugas.description = "";
       formTugas.deadline = "";
@@ -433,12 +432,19 @@ const loadPresensi = async () => {
   try {
     const sesiId = route.query.id;
     const res = await getPresensiMahasiswa(sesiId);
-    if (!res) return;
-    const statusMap = { hadir: "H", izin: "I", sakit: "S", alpha: "A" };
-    res.mahasiswa.forEach((item) => {
-      const mahasiswa = daftarMahasiswa.value.find((m) => m.id === item.detail_id);
-      if (mahasiswa) mahasiswa.status = statusMap[item.status?.toLowerCase()] || null;
-    });
+    
+    // Deteksi jika response backend memiliki riwayat absensi mahasiswa
+    if (res && res.mahasiswa && res.mahasiswa.length > 0) {
+      sudahAdaPresensi.value = true; // Sesi ini sudah ada absennya (Mode Edit Aktif)
+      const statusMap = { hadir: "H", izin: "I", sakit: "S", alpha: "A" };
+      res.mahasiswa.forEach((item) => {
+        const mahasiswa = daftarMahasiswa.value.find((m) => m.id === item.detail_id);
+        if (mahasiswa) mahasiswa.status = statusMap[item.status?.toLowerCase()] || null;
+      });
+    } else {
+      sudahAdaPresensi.value = false; // Sesi ini masih kosong absennya (Mode Tambah Baru)
+      daftarMahasiswa.status = statusMap[item.status?.toLowerCase()] || null;
+    }
   } catch (error) {
     console.error(error);
   }
@@ -458,77 +464,84 @@ const filteredMahasiswa = computed(() => {
   );
 });
 
+// FIX PERUBAHAN: Hanya merubah status di sisi layar saja, tidak langsung kirim ke server backend
+const ubahStatus = (mahasiswa, statusBaru) => {
+  mahasiswa.status = statusBaru;
+};
+
+// FIX PERUBAHAN: Penggabungan eksekusi POST (Tambah) dan PUT (Edit) wajib klik tombol ini
 const simpanPresensi = async () => {
   try {
-    const payload = {
-      pengampu_id: pengampuId || "019eb0e3-ef81-7ade-b1bf-43fcc47ea03f",
-      sesi_id: route.query.id,
-      mahasiswa: daftarMahasiswa.value,
-    };
-    await postPresensiMahasiswa(payload);
-    alert("Presensi berhasil disimpan");
-  } catch (error) {
-    console.error(error);
-  }
-};
-
-const ubahStatus = async (mahasiswa, statusBaru) => {
-  try {
-    mahasiswa.status = statusBaru;
     const statusMap = { H: "hadir", I: "izin", S: "sakit", A: "alpha" };
-    const payload = {
-      sesi_id: route.query.id,
-      detail: [{ detail_id: mahasiswa.id, status: statusMap[statusBaru] }],
-    };
-    await updatePresensiMahasiswa(payload);
+
+    if (sudahAdaPresensi.value) {
+      // 🔄 JALUR EDIT PRESENSI (PUT)
+      // Satukan seluruh status terbaru mahasiswa dari layar ke array detail
+      const detailPayload = daftarMahasiswa.value.map(m => ({
+        detail_id: m.id,
+        status: statusMap[m.status] || "alpha" // jika belum milih otomatis default alpha
+      }));
+
+      const payloadUpdate = {
+        sesi_id: route.query.id,
+        detail: detailPayload
+      };
+
+      await updatePresensiMahasiswa(payloadUpdate);
+      alert("Perubahan presensi mahasiswa berhasil diperbarui!");
+    } else {
+      // 📥 JALUR TAMBAH PRESENSI BARU (POST)
+      const payloadTambah = {
+        pengampu_id: pengampuId || "019eb0e3-ef81-7ade-b1bf-43fcc47ea03f",
+        sesi_id: route.query.id,
+        mahasiswa: daftarMahasiswa.value,
+      };
+
+      await postPresensiMahasiswa(payloadTambah);
+      alert("Presensi baru mahasiswa berhasil disimpan!");
+    }
+    
+    // Refresh visual data agar sinkron dengan state database terbaru
     await loadPresensi();
   } catch (error) {
-    console.error(error);
+    console.error("Gagal melakukan aksi simpan presensi:", error);
+    alert("Terjadi masalah internal server sewaktu menyimpan presensi.");
   }
 };
 
-// ==========================================
-// LOGIKA TUTUP SESI (VERSI AWAL - MENUNGGU FIX BACKEND)
-// ==========================================
 const tutupSesi = async () => {
-  const konfirmasi = confirm("Apakah Anda yakin ingin menutup sesi perkuliahan ini?");
+  const konfirmasi = confirm("Apakah Anda yakin ingin menutup sesi ini?");
   if (!konfirmasi) return;
 
   try {
-    const idSesiTarget = sesiId || route.query.sesi_id; 
-    if (!idSesiTarget) {
-      alert("ID Sesi tidak ditemukan.");
-      return;
-    }
+    const idSesiTarget = route.query.id; 
+    const token = localStorage.getItem("token");
 
     const payload = { 
       status: "closed" 
     };
     
-    const res = await updateJadwal(idSesiTarget, payload);
+    const res = await axios.put(`https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/${idSesiTarget}`, payload, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+      }
+    });
 
-    if (res?.success || res?.code === 200 || res?.status === 200) {
+    if (res.status === 200 || res.data?.success) {
       alert("Sesi perkuliahan berhasil ditutup!");
-      
       router.push({
         path: "/detail-kelas",
-        query: {
-          classId: classId,
-          class_id: classId,
-          kode: mataKuliahKode,
-          pengampuId: pengampuId
+        query: { 
+          classId: route.query.classId || route.query.class_id,
+          pengampuId: route.query.pengampuId,
+          kode: route.query.kode
         }
       });
-    } else {
-      alert("Gagal memperbarui status penutupan sesi.");
     }
   } catch (error) {
-    console.error("❌ Gagal menutup sesi:", error);
-    if (error.response && error.response.data) {
-      alert(`Gagal menutup sesi: ${error.response.data.message || 'Error Server'}`);
-    } else {
-      alert("Terjadi kesalahan sistem saat mencoba menutup sesi.");
-    }
+    console.error("❌ Eror mutlak dari server:", error.response?.data || error);
+    alert(`Gagal Menutup Sesi: ${error.response?.data?.message || error.message}`);
   }
 };
 </script>
@@ -634,6 +647,7 @@ const tutupSesi = async () => {
         </div>
     </div>
 
+    <!-- Modal Pengumpulan Tugas -->
     <div v-if="showSubmissionModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-[10px] p-5 w-full max-w-2xl shadow-xl space-y-4 text-[12px]">
         <div class="flex justify-between items-center border-b pb-3">
@@ -703,6 +717,7 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Modal Tambah Tugas -->
     <div v-if="showTugasModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-[10px] p-5 w-full max-w-md shadow-lg space-y-4 text-[12px]">
         <div class="flex justify-between items-center border-b pb-2">
@@ -741,6 +756,7 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Bagian Daftar Presensi Mahasiswa -->
     <div class="mt-3">
         <h2 class="text-[15px] font-semibold mb-3">Daftar Presensi Mahasiswa</h2>
         <button @click="simpanPresensi" class="bg-green-600 text-white text-[12px] px-4 py-2 rounded-md mb-4 hover:bg-green-500">Simpan Presensi</button>
@@ -758,6 +774,7 @@ const tutupSesi = async () => {
         </div>
     </div>
 
+    <!-- Modal Tambah Materi -->
     <div v-if="showMateriModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div class="bg-white w-[420px] rounded-[10px] p-6 relative shadow-lg">
         <button @click="showMateriModal = false" class="absolute top-3 right-4 text-[22px]">×</button>
@@ -784,6 +801,7 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Modal Media Library -->
     <div v-if="showFileLibraryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div class="bg-white w-[520px] rounded-[10px] p-6 relative shadow-lg">
         <button @click="showFileLibraryModal = false" class="absolute top-3 right-4 text-[22px]">×</button>
