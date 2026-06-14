@@ -4,32 +4,32 @@ import {ref} from "vue";
 export function kelasService() {
   const meta = ref({});
 
-  async function getSesiPengampu(pengampuId, page = 1) {
-    const token = localStorage.getItem("token");
+  // async function getSesiPengampu(pengampuId, page = 1) {
+  //   const token = localStorage.getItem("token");
 
-    try {
-      const res = await axios.get(
-        `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
-        {
-          params: {
-            page
-          },
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
+  //   try {
+  //     const res = await axios.get(
+  //       `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
+  //       {
+  //         params: {
+  //           page
+  //         },
+  //         headers: {
+  //           Authorization: `Bearer ${token}`,
+  //           Accept: "application/json",
+  //         },
+  //       }
+  //     );
 
-      console.log("Response API sesi pengampu:", res.data);
-      meta.value = res.data.meta;
-      return res.data.data || [];
+  //     console.log("Response API sesi pengampu:", res.data);
+  //     meta.value = res.data.meta;
+  //     return res.data.data || [];
 
-    } catch (error) {
-      console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
-      return [];
-    }
-  }
+  //   } catch (error) {
+  //     console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
+  //     return [];
+  //   }
+  // }
 
   async function getKelas() {
     const token = localStorage.getItem("token");
@@ -246,6 +246,34 @@ async function getJadwalById(sesiId) {
     }
   }
 
+  // Ganti fungsi getSesiPengampu di dalam kelas.js kamu
+async function getSesiPengampu(pengampuId = null, page = 1) {
+  const token = localStorage.getItem("token");
+
+  try {
+    const res = await axios.get(
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions`,
+      {
+        params: {
+          page: page // Dinamis mengikuti halaman yang diminta loop frontend
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    console.log(`Response API Sesi Page ${page}:`, res.data);
+    meta.value = res.data.meta;
+    return res.data; // Kembalikan full objek (termasuk data dan meta)
+
+  } catch (error) {
+    console.error(`Gagal ambil sesi kelas page ${page}:`, error.response?.data || error);
+    return null;
+  }
+} 
+
   return { 
     meta,
     getSesiPengampu, 
@@ -256,6 +284,7 @@ async function getJadwalById(sesiId) {
     updatePresensiMahasiswa,
     getPresensiMahasiswa, 
     getJadwalById,
-    updateJadwal
+    updateJadwal,
+    // getaAllSesiDosen
   };
 }

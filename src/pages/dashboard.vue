@@ -1,7 +1,7 @@
 <script setup>
 import adminLayout from "./adminLayout.vue";
 import { ref, onMounted, computed } from "vue";
-import { CalendarDays, User, Users, ScanLine, CloudUpload, ChartNoAxesColumn, UserRound, Clock, MapPin, CalendarClock } from "lucide-vue-next";
+import { CalendarDays, User, Users, Clock, CalendarClock } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { presensiService } from "../services/presensi";
 import { kelasService } from "../services/kelas";
@@ -11,7 +11,7 @@ const router = useRouter();
 const { presensiDosen } = presensiService();
 const { getSesiPengampu } = kelasService();
 
-//tanggal hari ini
+// Tanggal hari ini
 const today = new Date();
 
 const tanggalHariIni = today.toLocaleDateString("id-ID", {
@@ -21,6 +21,7 @@ const tanggalHariIni = today.toLocaleDateString("id-ID", {
   year: "numeric",
 });
 
+// Card Jadwal Atas (Statis/Hari ini)
 const jadwalKelas = [
   {
     mataKuliah: "Administrasi Database (4A)",
@@ -34,61 +35,76 @@ const jadwalKelas = [
   }
 ];
 
+// Data Rekap Absensi Mahasiswa
 const presensi = [
-  {
-    label: "Hadir",
-    jumlah: 95,
-    persen: "79%",
-    width: "79%",
-    color: "bg-green-500",
-  },
-  {
-    label: "Sakit",
-    jumlah: 5,
-    persen: "1%",
-    width: "10%",
-    color: "bg-blue-300",
-  },
-  {
-    label: "Izin",
-    jumlah: 7,
-    persen: "6%",
-    width: "15%",
-    color: "bg-yellow-400",
-  },
-  {
-    label: "Alpha",
-    jumlah: 7,
-    persen: "6%",
-    width: "15%",
-    color: "bg-red-500",
-  },
+  { label: "Hadir", jumlah: 95, persen: "79%", width: "79%", color: "bg-green-500" },
+  { label: "Sakit", jumlah: 5, persen: "1%", width: "10%", color: "bg-blue-300" },
+  { label: "Izin", jumlah: 7, persen: "6%", width: "15%", color: "bg-yellow-400" },
+  { label: "Alpha", jumlah: 7, persen: "6%", width: "15%", color: "bg-red-500" },
 ];
 
-//kalender
+// --- STATE INTEGRASI KALENDER & API ---
+const listSemuaSesi = ref([]);
 const currentDate = ref(new Date());
-const selectedDate = ref(null);
+const selectedDate = ref(new Date()); 
 
-// Nama bulan + tahun
+// Helper format tanggal dua digit (YYYY-MM-DD) agar cocok dengan database
+const formatKeYYYYMMDD = (tahun, bulan, tanggal) => {
+  const mm = String(bulan + 1).padStart(2, '0');
+  const dd = String(tanggal).padStart(2, '0');
+  return `${tahun}-${mm}-${dd}`;
+};
+
+// FUNGSI MERGE ALL PAGES JADWAL DOSEN
+const fetchSesiKalender = async () => {
+  try {
+    listSemuaSesi.value = []; 
+    let tempCombinedData = [];
+
+    // 1. Ambil Halaman Pertama
+    const firstPageResult = await getSesiPengampu(null, 1);
+    
+    if (firstPageResult && firstPageResult.success) {
+      const dataHalaman1 = firstPageResult.data || [];
+      tempCombinedData = [...tempCombinedData, ...dataHalaman1];
+
+      const lastPage = firstPageResult.meta?.last_page || 1;
+
+      // 2. Looping Ambil Halaman Sisa
+      for (let currentPage = 2; currentPage <= lastPage; currentPage++) {
+        const nextPageResult = await getSesiPengampu(null, currentPage);
+        if (nextPageResult && nextPageResult.success) {
+          const dataHalamanSisa = nextPageResult.data || [];
+          tempCombinedData = [...tempCombinedData, ...dataHalamanSisa];
+        }
+      }
+
+      // 3. Simpan Seluruh Hasil Gabungan Data Halaman ke State Kalender
+      listSemuaSesi.value = tempCombinedData;
+      console.log("Berhasil menggabungkan seluruh halaman sesi:", listSemuaSesi.value.length);
+    }
+  } catch (err) {
+    console.error("Gagal memuat atau menggabungkan halaman sesi kalender:", err);
+  }
+};
+
+// Logika pembentukan struktur kalender
 const namaBulan = computed(() =>
   currentDate.value.toLocaleDateString("id-ID", { month: "long", year: "numeric" })
 );
 
-// Jumlah hari di bulan sekarang
 const daysInMonth = computed(() => {
   const y = currentDate.value.getFullYear();
   const m = currentDate.value.getMonth();
   return new Date(y, m + 1, 0).getDate();
 });
 
-// Hari pertama bulan ini (0=Min)
 const firstDay = computed(() => {
   const y = currentDate.value.getFullYear();
   const m = currentDate.value.getMonth();
   return new Date(y, m, 1).getDay();
 });
 
-// Array kalender dengan null di awal sesuai hari pertama
 const kalenderDays = computed(() => {
   const days = [];
   for (let i = 0; i < firstDay.value; i++) days.push(null);
@@ -106,13 +122,52 @@ const nextMonth = () => {
 
 const pilihTanggal = (day) => {
   if (!day) return;
-  selectedDate.value = day;
+  selectedDate.value = new Date(currentDate.value.getFullYear(), currentDate.value.getMonth(), day);
 };
 
-//buka sesi perkuliahan
+// TRIGGER TITIK MERAH
+const cekJadwalMengajar = (day) => {
+  if (!day) return false;
+  const tanggalString = formatKeYYYYMMDD(currentDate.value.getFullYear(), currentDate.value.getMonth(), day);
+  return listSemuaSesi.value.some(sesi => sesi.session_date === tanggalString);
+};
+
+// Filter data sesi yang muncul di bawah kalender berdasarkan klik tanggal
+const infoJadwalTerpilih = computed(() => {
+  if (!selectedDate.value) return [];
+  
+  const tanggalString = formatKeYYYYMMDD(
+    selectedDate.value.getFullYear(),
+    selectedDate.value.getMonth(),
+    selectedDate.value.getDate()
+  );
+
+  return listSemuaSesi.value.filter(sesi => sesi.session_date === tanggalString);
+});
+
+const labelHariTerpilih = computed(() => {
+  if (!selectedDate.value) return "";
+  return selectedDate.value.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
+});
+
+// Arahkan ke halaman detail sesi absensi mahasiswa
+const navigasiKeDetailSesi = (sesi) => {
+  router.push({
+    path: "/detail-sesi",
+    query: {
+      id: sesi.id,
+      class_id: sesi.class_id,
+      classId: sesi.class_id,
+      pengampuId: sesi.pengampu_id,
+      kode: sesi.course_code
+    }
+  });
+};
+
+// Logika Modal Sesi Atas
 const topikKelas = ref("");
 const showModal = ref(false);
-const selectedJadwal = ref(null)
+const selectedJadwal = ref(null);
 
 const openModal = (item) => {
   selectedJadwal.value = item;
@@ -129,7 +184,6 @@ const bukaSesi = () => {
     alert("Topik kelas wajib diisi");
     return;
   }
-
   router.push({
     path: "/detail-sesi",
     query: {
@@ -142,352 +196,280 @@ const bukaSesi = () => {
   });
 };
 
-//presensi dosen
+// --- LOGIKA PRESENSI DOSEN ASLI SEBELUMNYA ---
 const sudahPresensi = ref(false);
 const loadingPresensi = ref(false);
 const showPresensiModal = ref(false);
 const statusPresensi = ref("");
 
+const todayKey = new Date().toISOString().split("T")[0];
+
 const submitPresensi = async () => {
   if (!statusPresensi.value) return;
-
   loadingPresensi.value = true;
 
   try {
-    // ✅ PAYLOAD SESUAI API
-    const payload = {
-      status: statusPresensi.value, // hadir / izin / sakit / alpha
-    };
-
-    console.log("📤 Payload dikirim:", payload);
-
+    const payload = { status: statusPresensi.value };
     const res = await presensiDosen(payload);
 
-    if (res?.success) {
-      console.log("✅ PRESENSI BERHASIL");
-
+    if (res?.success || res) {
       sudahPresensi.value = true;
       localStorage.setItem("presensi_dosen_hari_ini", todayKey);
-
       showPresensiModal.value = false;
       statusPresensi.value = "";
     }
-
   } catch (error) {
-    console.error("❌ Error submit presensi:", error);
+    console.error("Error submit presensi:", error);
   } finally {
     loadingPresensi.value = false;
   }
 };
 
-// ambil tanggal hari ini untuk key localStorage
-const todayKey = new Date().toISOString().split("T")[0];
-
-// cek localStorage saat mounted
 onMounted(() => {
+  fetchSesiKalender();
   const saved = localStorage.getItem("presensi_dosen_hari_ini");
   if (saved === todayKey) {
     sudahPresensi.value = true;
   }
 });
-
-// fungsi presensi
-const handlePresensi = async () => {
-  if (sudahPresensi.value) return; // disable jika sudah presensi
-  loadingPresensi.value = true;
-
-  try {
-    const response = await presensiDosen();
-
-    if (response.success) {
-      // set status
-      sudahPresensi.value = true;
-
-      // simpan ke localStorage supaya tetap stay walau refresh/logout
-      localStorage.setItem("presensi_dosen_hari_ini", todayKey);
-    }
-  } catch (error) {
-    console.error("Gagal presensi:", error.response?.data || error);
-  } finally {
-    loadingPresensi.value = false;
-  }
-};
 </script>
 
 <template>
   <adminLayout>
     <div class="flex justify-between items-start">
       <div>
-        <h1 class="text-[20px] font-semibold mb-2">Selamat Datang, Budi Siregar!</h1>
-        <p class="text-[12px] font-normal">Berikut jadwal dan aktivitas hari Ini</p>
+        <h1 class="text-[20px] font-semibold mb-2">Selamat Datang, Dosen Pengampu!</h1>
+        <p class="text-[12px] font-normal text-gray-500">Berikut jadwal dan aktivitas Anda hari ini</p>
       </div>
 
-      <div class="card-dashboard bg-white px-5 py-3 rounded-[10px] shadow-md flex items-center gap-2 mb-8">
-        <CalendarDays class="w-5 h-5" />
-        <p class="font-semibold text-[12px]">{{ tanggalHariIni }}</p>
+      <div class="bg-white px-5 py-3 rounded-[10px] shadow-sm flex items-center gap-2 mb-8 border border-gray-100">
+        <CalendarDays class="w-5 h-5 text-blue-900" />
+        <p class="font-semibold text-[12px] text-gray-700">{{ tanggalHariIni }}</p>
       </div>
     </div>
 
     <div class="flex gap-5 items-start">
-      <!-- kiri -->
       <div class="w-[500px] space-y-5">
-        <!-- jadwal kelas -->
-        <div class="card-dashboard bg-white rounded-[3px] shadow-md p-4">
-          <h1 class="text-[15px] font-bold mb-2">JADWAL KELAS HARI INI</h1>
+        <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-4">
+          <h1 class="text-[14px] font-bold text-gray-800 mb-3">JADWAL KELAS HARI INI</h1>
 
-          <div class="space-y-2">
+          <div class="space-y-3">
             <div
               v-for="(item, index) in jadwalKelas"
               :key="index"
-              class="bg-white rounded-[3px] shadow-md p-4 flex justify-between items-center">
+              class="bg-gray-50 rounded-[8px] p-4 flex justify-between items-center border border-gray-100">
               <div>
-                <h3 class="font-bold text-[12px] mb-2">{{ item.mataKuliah }}</h3>
-                <div class="flex items-center gap-2 text-[12px] mb-1">
-                  <Clock class="w-4 h-4" />
+                <h3 class="font-bold text-[12px] text-gray-800 mb-2">{{ item.mataKuliah }}</h3>
+                <div class="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
+                  <Clock class="w-3.5 h-3.5 text-gray-400" />
                   <span>{{ item.jam }}</span>
                 </div>
-
-                <div class="flex items-center gap-2 text-[12px]">
-                  <User class="w-4 h-4" />
+                <div class="flex items-center gap-2 text-[11px] text-gray-500">
+                  <User class="w-3.5 h-3.5 text-gray-400" />
                   <span>{{ item.dosen }}</span>
                 </div>
               </div>
 
-              <button @click="openModal(item)" class="bg-blue-900 text-white text-[12px] font-semibold px-5 py-2 rounded-[8px] shadow-md hover:bg-blue-800">
+              <button @click="openModal(item)" class="bg-blue-900 text-white text-[11px] font-semibold px-4 py-2 rounded-[6px] shadow-sm hover:bg-blue-800 transition">
                 Buka Sesi
               </button>
             </div>
           </div>
 
-          <div class="text-right mt-2">
-            <button @click="$router.push('/kelas')" class="text-blue-900 font-semibold hover:text-blue-700">
+          <div class="text-right mt-3">
+            <button @click="$router.push('/kelas')" class="text-blue-900 text-[12px] font-semibold hover:text-blue-700">
               Lihat Semua Jadwal &gt;
             </button>
           </div>
         </div>
 
-        <!-- Presensi Dosen -->
-        <div class="bg-white rounded-[10px] shadow-md p-6 w-full h-[260px]">
-          <p class="text-gray-400 text-[12px] mb-1">Kelas Hari Ini</p>
-          <p class="text-[15px] font-semibold mb-6">{{ new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) }}</p>
-          <div class="flex justify-center mb-4">
-            <!-- belum -->
-            <div
-              v-if="!sudahPresensi"
-              class="w-[70px] h-[70px] bg-red-500 rounded-full border-[5px] border-red-500 flex items-center justify-center"
-            >
-              <span class="text-white text-[42px] font-bold">
-                ✕
-              </span>
+        <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-5 h-[250px] flex flex-col justify-between">
+          <div>
+            <p class="text-gray-400 text-[11px] mb-0.5">Presensi Kehadiran Dosen</p>
+            <p class="text-[13px] font-semibold text-gray-700">{{ tanggalHariIni }}</p>
+          </div>
+          
+          <div class="flex justify-center my-2">
+            <div v-if="!sudahPresensi" class="w-[60px] h-[60px] bg-amber-500 rounded-full flex items-center justify-center shadow-inner">
+              <span class="text-white text-[32px] font-bold">!</span>
             </div>
-            <!-- sudah -->
-            <div
-              v-else
-              class="w-[70px] h-[70px] bg-green-500 rounded-full border-[5px] border-green-500 flex items-center justify-center"
-            >
-              <span class="text-white text-[42px] font-bold">
-                ✓
-              </span>
+            <div v-else class="w-[60px] h-[60px] bg-green-500 rounded-full flex items-center justify-center shadow-inner">
+              <span class="text-white text-[28px] font-bold">✓</span>
             </div>
           </div>
 
-          <p class="text-center text-[16px] font-semibold mb-3">
-            {{
-              sudahPresensi
-                ? "Kamu sudah presensi hari ini"
-                : "Kamu belum presensi hari ini"
-            }}
+          <p class="text-center text-[13px] font-semibold text-gray-700">
+            {{ sudahPresensi ? "Anda sudah melakukan presensi hari ini" : "Anda belum melakukan presensi hari ini" }}
           </p>
+          
           <div class="flex justify-center">
             <button
               @click="showPresensiModal = true"
               :disabled="sudahPresensi || loadingPresensi"
-              class="bg-blue-900 text-white px-8 py-2 rounded-[5px] text-[13px] font-semibold disabled:bg-gray-400"
+              class="w-full bg-blue-900 text-white py-2 rounded-[6px] text-[12px] font-semibold disabled:bg-gray-300 disabled:text-gray-500 transition shadow-sm"
             >
-              {{ loadingPresensi ? "Mengirim..." : "Presensi" }}
+              {{ loadingPresensi ? "Mengirim..." : "Klik Untuk Presensi Masuk" }}
             </button>
           </div>
         </div>
-
       </div>
       
-
-      <!-- Kanan Dashboard -->
       <div class="w-[500px] flex flex-col space-y-5">
+        <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-5">
+          <h1 class="text-[14px] font-bold text-gray-800 mb-3">REKAP PRESENSI HARI INI</h1>
 
-        <!-- Chart Presensi Mahasiswa -->
-        <div class="bg-white rounded-[10px] shadow-md p-5">
-          <h1 class="text-[15px] font-bold mb-1">REKAP PRESENSI HARI INI</h1>
-
-          <!-- Total Mahasiswa -->
-          <div class="card-dashboard bg-blue-50 shadow-sm rounded-[7px] p-1 flex items-center gap-3 mb-3 w-fit">
-            <Users class="w-8 h-8" />
+          <div class="bg-blue-50/70 rounded-[8px] p-2 flex items-center gap-3 mb-4 w-fit px-4 border border-blue-100/50">
+            <Users class="w-5 h-5 text-blue-900" />
             <div>
-              <p class="text-[12px] font-semibold">Total Mahasiswa</p>
-              <p class="text-[12px] text-gray-600">120 Mahasiswa</p>
+              <p class="text-[11px] text-gray-500 font-medium">Total Mahasiswa Diampu</p>
+              <p class="text-[13px] font-bold text-blue-950">120 Mahasiswa</p>
             </div>
           </div>
 
-          <!-- Chart Presensi Detail -->
-          <div class="space-y-4">
-            <div v-for="(item, index) in presensi" :key="index" class="grid grid-cols-[70px_1fr_20px_30px] items-center gap-3">
+          <div class="space-y-3.5">
+            <div v-for="(item, index) in presensi" :key="index" class="grid grid-cols-[60px_1fr_25px_35px] items-center gap-3">
               <div class="flex items-center gap-2">
-                <div class="w-3 h-3 rounded-full" :class="item.color"></div>
-                <p class="text-[12px] font-semibold">{{ item.label }}</p>
+                <div class="w-2.5 h-2.5 rounded-full" :class="item.color"></div>
+                <p class="text-[12px] font-medium text-gray-600">{{ item.label }}</p>
               </div>
 
-              <div class="w-full bg-gray-200 h-2 rounded-full">
-                <div class="h-2 rounded-full" :class="item.color" :style="{ width: item.width }"></div>
+              <div class="w-full bg-gray-100 h-2 rounded-full">
+                <div class="h-2 rounded-full transition-all duration-500" :class="item.color" :style="{ width: item.width }"></div>
               </div>
 
-              <p class="text-[12px] font-semibold">{{ item.jumlah }}</p>
-              <p class="text-[12px] font-semibold">{{ item.persen }}</p>
+              <p class="text-[12px] font-bold text-gray-700 text-right">{{ item.jumlah }}</p>
+              <p class="text-[11px] font-medium text-gray-400 text-right">{{ item.persen }}</p>
             </div>
           </div>
         </div>
 
-        <!-- Kalender Akademik -->
-        <div class="bg-white shadow rounded p-4">
-          <h3 class="font-semibold text-[14px] mb-3">Kalender Akademik</h3>
+        <div class="bg-white shadow-sm border border-gray-100 rounded-[10px] p-4">
+          <h3 class="font-bold text-[14px] text-gray-800 mb-4">Kalender Akademik</h3>
 
-          <!-- Header Bulan -->
           <div class="flex items-center justify-center gap-8 mb-4">
-            <button @click="prevMonth" class="font-bold text-[14px]">‹</button>
-            <h2 class="text-[12px] font-medium">{{ namaBulan }}</h2>
-            <button @click="nextMonth" class="font-bold text-[14px]">›</button>
+            <button @click="prevMonth" class="font-bold text-[18px] text-gray-400 hover:text-blue-900 select-none cursor-pointer">‹</button>
+            <h2 class="text-[12px] font-bold text-gray-700 uppercase tracking-wider w-28 text-center">{{ namaBulan }}</h2>
+            <button @click="nextMonth" class="font-bold text-[18px] text-gray-400 hover:text-blue-900 select-none cursor-pointer">›</button>
           </div>
 
-          <!-- Nama Hari -->
-          <div class="grid grid-cols-7 text-center text-[12px] mb-2">
-            <span>Min</span><span>Sen</span><span>Sel</span><span>Rab</span>
+          <div class="grid grid-cols-7 text-center text-[11px] font-bold text-gray-400 mb-2">
+            <span class="text-red-500">Min</span><span>Sen</span><span>Sel</span><span>Rab</span>
             <span>Kam</span><span>Jum</span><span>Sab</span>
           </div>
 
-          <!-- Tanggal Kalender -->
           <div class="grid grid-cols-7 text-center gap-y-2">
-            <div v-for="(day, index) in kalenderDays" :key="index">
+            <div v-for="(day, index) in kalenderDays" :key="index" class="flex flex-col items-center justify-center relative h-9">
               <button
                 v-if="day"
                 @click="pilihTanggal(day)"
-                class="w-8 h-8 rounded text-[12px] flex items-center justify-center hover:bg-blue-100"
-                :class="selectedDate === day ? 'bg-blue-900 text-white' : ''"
+                class="w-8 h-8 rounded-full text-[12px] flex items-center justify-center transition-all focus:outline-none relative"
+                :class="selectedDate && selectedDate.getDate() === day && selectedDate.getMonth() === currentDate.getMonth() && selectedDate.getFullYear() === currentDate.getFullYear()
+                  ? 'bg-green-600 text-white font-bold shadow-sm' 
+                  : 'hover:bg-blue-50 text-gray-800 font-medium'"
               >
                 {{ day }}
               </button>
-              <div v-else class="w-8 h-8"></div>
+              
+              <span 
+                v-if="day && cekJadwalMengajar(day)" 
+                class="w-[5px] h-[5px] bg-red-500 rounded-full absolute bottom-[1px]"
+              ></span>
+              
+              <div v-else-if="!day" class="w-8 h-8"></div>
             </div>
           </div>
-        </div>
-      </div>
 
-    </div>
+          <hr class="my-4 border-gray-100" />
+          <div class="mt-2">
+            <p class="text-gray-400 text-[11px] font-medium uppercase tracking-wide">Jadwal Kelas Terpilih</p>
+            <p class="text-[13px] font-bold text-gray-800 mb-3">{{ labelHariTerpilih }}</p>
 
-    <!-- //buka sesi  -->
-    <div
-      v-if="showModal"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-      <div class="bg-white w-[480px] rounded-[8px] border border-blue-900 p-8 relative shadow-lg">
-        <button
-          @click="closeModal"
-          class="absolute top-4 right-4 text-black text-3xl"
-        >
-          ×
-        </button>
+            <div class="space-y-3">
+              <div 
+                v-for="sesi in infoJadwalTerpilih" 
+                :key="sesi.id" 
+                class="bg-gray-50/50 border border-gray-100 rounded-[8px] p-3 flex justify-between items-start hover:bg-gray-50 transition"
+              >
+                <div class="space-y-1">
+                  <h4 class="font-bold text-[12px] text-gray-800 uppercase">{{ sesi.course_name }}</h4>
+                  
+                  <div class="flex items-center gap-1.5 text-gray-500 text-[11px]">
+                    <Users class="w-3.5 h-3.5 text-gray-400" />
+                    <span>Kelas {{ sesi.class_name }}</span>
+                  </div>
+                  
+                  <div class="flex items-center gap-1.5 text-gray-500 text-[11px]">
+                    <Clock class="w-3.5 h-3.5 text-gray-400" />
+                    <span>{{ sesi.start_time.substring(0,5) }} - {{ sesi.end_time.substring(0,5) }} WIB</span>
+                  </div>
+                  
+                  <p class="text-[11px] text-blue-900 font-medium pt-1">
+                    Sesi ke-{{ sesi.session_number }} : <span class="text-gray-600 font-normal italic">"{{ sesi.topic || 'Belum diisi topik' }}"</span>
+                  </p>
+                </div>
 
-        <div class="flex justify-center mb-3">
-          <CalendarClock class="w-16 h-16" />
-        </div>
+                <div class="text-right flex flex-col items-end justify-between h-full min-h-[60px]">
+                  <span class="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded">
+                    Ruang H-205
+                  </span>
+                  <button 
+                    @click="navigasiKeDetailSesi(sesi)"
+                    class="bg-blue-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-[5px] shadow-sm hover:bg-blue-800 transition mt-3"
+                  >
+                    Lihat Detail Sesi
+                  </button>
+                </div>
+              </div>
 
-        <h2 class="text-center text-[22px] font-bold mb-5">
-          Buka Sesi Perkuliahan
-        </h2>
+              <div v-if="infoJadwalTerpilih.length === 0" class="text-center py-6 text-gray-400 text-[11px] bg-gray-50 rounded-[8px] border border-dashed border-gray-200">
+                Tidak ada jadwal mengajar pada tanggal ini.
+              </div>
+            </div>
+          </div>
 
-        <div class="border border-blue-100 rounded-[8px] shadow-md p-5 mb-5 w-[340px] mx-auto">
-          <h3 class="font-bold text-[15px] mb-1">
-            {{ selectedJadwal.mataKuliah }}
-          </h3>
-
-          <p class="text-[11px] text-gray-400 mb-4">
-            Sesi 12
-          </p>
-
-          <label class="block text-[12px] font-medium mb-2">
-            Topik Kelas
-          </label>
-
-          <input
-            v-model="topikKelas"
-            type="text"
-            placeholder="Masukkan topik kelas"
-            class="w-full border border-gray-300 rounded px-3 py-2 text-[12px] outline-none focus:border-blue-900"
-          />
-        </div>
-
-        <h3 class="text-center text-[15px] font-semibold mb-2">
-          Apakah Anda yakin ingin membuka sesi perkuliahan?
-        </h3>
-
-        <p class="text-center text-[12px] text-gray-600 mb-8">
-          Mahasiswa dapat melakukan presensi<br />
-          setelah sesi dibuka.
-        </p>
-
-        <div class="flex gap-8">
-          <button
-            @click="closeModal"
-            class="w-full border border-blue-900 text-blue-900 font-semibold py-2 rounded-[5px]">
-            Batal
-          </button>
-
-          <button @click="bukaSesi"
-            class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[5px]">
-            Buka Sesi
-          </button>
         </div>
       </div>
     </div>
 
-    <!-- presensi -->
-    <div
-      v-if="showPresensiModal"
-      class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-    >
-      <div class="bg-white w-[320px] p-6 rounded-[10px] shadow-lg relative">
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 back-drop-blur-sm">
+      <div class="bg-white w-[440px] rounded-[10px] p-6 relative shadow-xl border border-gray-100">
+        <button @click="closeModal" class="absolute top-3 right-4 text-gray-400 hover:text-black text-[24px]">×</button>
+        <div class="flex justify-center mb-2"><CalendarClock class="w-12 h-12 text-blue-900" /></div>
+        <h2 class="text-center text-[18px] font-bold text-gray-800 mb-4">Buka Sesi Perkuliahan</h2>
+        
+        <div class="bg-gray-50 border border-gray-100 rounded-[8px] p-4 mb-4">
+          <h3 class="font-bold text-[13px] text-gray-800 mb-1">{{ selectedJadwal.mataKuliah }}</h3>
+          <p class="text-[11px] text-gray-400 mb-3">Kelas 4A • Sesi Lanjutan</p>
+          <label class="block text-[11px] font-bold text-gray-600 mb-1">Topik Utama Pembahasan</label>
+          <input v-model="topikKelas" type="text" placeholder="Contoh: Implementasi Query Optimization" class="w-full bg-white border border-gray-200 rounded px-3 py-2 text-[12px] outline-none focus:border-blue-900 transition" />
+        </div>
+        
+        <h3 class="text-center text-[13px] font-bold text-gray-700 mb-1">Apakah Anda yakin ingin mengaktifkan sesi ini?</h3>
+        <p class="text-center text-[11px] text-gray-400 mb-6">Mahasiswa di kelas bersangkutan akan bisa langsung<br />melakukan absensi masuk.</p>
+        
+        <div class="flex gap-4">
+          <button @click="closeModal" class="w-full border border-gray-200 text-gray-500 font-semibold py-2 rounded-[6px] text-[12px] hover:bg-gray-50">Batal</button>
+          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[6px] text-[12px] hover:bg-blue-800 shadow-sm">Ya, Buka Sesi</button>
+        </div>
+      </div>
+    </div>
 
-        <!-- close -->
-        <button
-          class="absolute top-2 right-3 text-[20px]"
-          @click="showPresensiModal = false"
-        >
-          ×
-        </button>
-
-        <h2 class="text-center font-semibold mb-4">
-          Pilih Status Presensi
-        </h2>
-
-        <!-- SELECT -->
-        <select
-          v-model="statusPresensi"
-          class="w-full border p-2 rounded mb-5 text-[13px]"
-        >
-          <option disabled value="">Pilih status</option>
+    <div v-if="showPresensiModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white w-[300px] p-5 rounded-[10px] shadow-xl relative border border-gray-100">
+        <button class="absolute top-2 right-3 text-gray-400 hover:text-black text-[20px]" @click="showPresensiModal = false">×</button>
+        <h2 class="text-center font-bold text-[14px] text-gray-800 mb-3">Pilih Status Kehadiran</h2>
+        
+        <select v-model="statusPresensi" class="w-full border border-gray-200 bg-white p-2 rounded-[6px] mb-4 text-[12px] outline-none focus:border-blue-900 text-gray-700">
+          <option disabled value="">-- Pilih Status --</option>
           <option value="hadir">Hadir</option>
           <option value="izin">Izin</option>
           <option value="sakit">Sakit</option>
-          <option value="alpha">Alpha</option>
         </select>
-
-        <button
-          @click="submitPresensi"
-          class="w-full bg-blue-900 text-white py-2 rounded"
-          :disabled="!statusPresensi"
-        >
-          Kirim Presensi
+        
+        <button @click="submitPresensi" class="w-full bg-blue-900 text-white py-2 rounded-[6px] text-[12px] font-bold disabled:bg-gray-300 shadow-sm" :disabled="!statusPresensi">
+          Kirim Data Presensi
         </button>
       </div>
     </div>
-
-    
   </adminLayout>
 </template>
