@@ -21,20 +21,6 @@ const tanggalHariIni = today.toLocaleDateString("id-ID", {
   year: "numeric",
 });
 
-// Card Jadwal Atas (Statis/Hari ini)
-const jadwalKelas = [
-  {
-    mataKuliah: "Administrasi Database (4A)",
-    jam: "13:30 - 17:00",
-    dosen: "Aqsal Habibi",
-  },
-  {
-    mataKuliah: "Administrasi Database (4A)",
-    jam: "13:30 - 17:00",
-    dosen: "Aqsal Habibi",
-  }
-];
-
 // Data Rekap Absensi Mahasiswa
 const presensi = [
   { label: "Hadir", jumlah: 95, persen: "79%", width: "79%", color: "bg-green-500" },
@@ -54,6 +40,17 @@ const formatKeYYYYMMDD = (tahun, bulan, tanggal) => {
   const dd = String(tanggal).padStart(2, '0');
   return `${tahun}-${mm}-${dd}`;
 };
+
+// --- COMPUTED: JADWAL KELAS HARI INI (DINAMIS DARI API) ---
+const jadwalKelasHariIniDinamis = computed(() => {
+  const tanggalHariIniString = formatKeYYYYMMDD(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+  // Menyaring seluruh sesi mengajar yang jatuh pada hari ini saja
+  return listSemuaSesi.value.filter(sesi => sesi.session_date === tanggalHariIniString);
+});
 
 // FUNGSI MERGE ALL PAGES JADWAL DOSEN
 const fetchSesiKalender = async () => {
@@ -164,7 +161,7 @@ const navigasiKeDetailSesi = (sesi) => {
   });
 };
 
-// Logika Modal Sesi Atas
+// Logika Modal Sesi Atas (Sekarang diarahkan langsung lewat navigasiKeDetailSesi)
 const topikKelas = ref("");
 const showModal = ref(false);
 const selectedJadwal = ref(null);
@@ -187,10 +184,10 @@ const bukaSesi = () => {
   router.push({
     path: "/detail-sesi",
     query: {
-      mataKuliah: selectedJadwal.value.mataKuliah,
-      kelas: "4A",
-      dosen: selectedJadwal.value.dosen,
-      jam: selectedJadwal.value.jam,
+      mataKuliah: selectedJadwal.value.course_name,
+      kelas: selectedJadwal.value.class_name,
+      dosen: "Dosen Pengampu",
+      jam: `${selectedJadwal.value.start_time} - ${selectedJadwal.value.end_time}`,
       topik: topikKelas.value,
     },
   });
@@ -255,24 +252,30 @@ onMounted(() => {
 
           <div class="space-y-3">
             <div
-              v-for="(item, index) in jadwalKelas"
-              :key="index"
+              v-for="sesi in jadwalKelasHariIniDinamis"
+              :key="sesi.id"
               class="bg-gray-50 rounded-[8px] p-4 flex justify-between items-center border border-gray-100">
               <div>
-                <h3 class="font-bold text-[12px] text-gray-800 mb-2">{{ item.mataKuliah }}</h3>
+                <h3 class="font-bold text-[12px] text-gray-800 mb-2 uppercase">
+                  {{ sesi.course_name }} ({{ sesi.class_name }})
+                </h3>
                 <div class="flex items-center gap-2 text-[11px] text-gray-500 mb-1">
                   <Clock class="w-3.5 h-3.5 text-gray-400" />
-                  <span>{{ item.jam }}</span>
+                  <span>{{ sesi.start_time.substring(0,5) }} - {{ sesi.end_time.substring(0,5) }} WIB</span>
                 </div>
                 <div class="flex items-center gap-2 text-[11px] text-gray-500">
                   <User class="w-3.5 h-3.5 text-gray-400" />
-                  <span>{{ item.dosen }}</span>
+                  <span>Sesi ke-{{ sesi.session_number }}</span>
                 </div>
               </div>
 
-              <button @click="openModal(item)" class="bg-blue-900 text-white text-[11px] font-semibold px-4 py-2 rounded-[6px] shadow-sm hover:bg-blue-800 transition">
+              <button @click="navigasiKeDetailSesi(sesi)" class="bg-blue-900 text-white text-[11px] font-semibold px-4 py-2 rounded-[6px] shadow-sm hover:bg-blue-800 transition">
                 Buka Sesi
               </button>
+            </div>
+
+            <div v-if="jadwalKelasHariIniDinamis.length === 0" class="text-center py-6 text-gray-400 text-[11px] bg-gray-50 rounded-[8px] border border-dashed border-gray-200">
+              Tidak ada jadwal mengajar untuk hari ini.
             </div>
           </div>
 
@@ -431,29 +434,6 @@ onMounted(() => {
       </div>
     </div>
 
-    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 back-drop-blur-sm">
-      <div class="bg-white w-[440px] rounded-[10px] p-6 relative shadow-xl border border-gray-100">
-        <button @click="closeModal" class="absolute top-3 right-4 text-gray-400 hover:text-black text-[24px]">×</button>
-        <div class="flex justify-center mb-2"><CalendarClock class="w-12 h-12 text-blue-900" /></div>
-        <h2 class="text-center text-[18px] font-bold text-gray-800 mb-4">Buka Sesi Perkuliahan</h2>
-        
-        <div class="bg-gray-50 border border-gray-100 rounded-[8px] p-4 mb-4">
-          <h3 class="font-bold text-[13px] text-gray-800 mb-1">{{ selectedJadwal.mataKuliah }}</h3>
-          <p class="text-[11px] text-gray-400 mb-3">Kelas 4A • Sesi Lanjutan</p>
-          <label class="block text-[11px] font-bold text-gray-600 mb-1">Topik Utama Pembahasan</label>
-          <input v-model="topikKelas" type="text" placeholder="Contoh: Implementasi Query Optimization" class="w-full bg-white border border-gray-200 rounded px-3 py-2 text-[12px] outline-none focus:border-blue-900 transition" />
-        </div>
-        
-        <h3 class="text-center text-[13px] font-bold text-gray-700 mb-1">Apakah Anda yakin ingin mengaktifkan sesi ini?</h3>
-        <p class="text-center text-[11px] text-gray-400 mb-6">Mahasiswa di kelas bersangkutan akan bisa langsung<br />melakukan absensi masuk.</p>
-        
-        <div class="flex gap-4">
-          <button @click="closeModal" class="w-full border border-gray-200 text-gray-500 font-semibold py-2 rounded-[6px] text-[12px] hover:bg-gray-50">Batal</button>
-          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-2 rounded-[6px] text-[12px] hover:bg-blue-800 shadow-sm">Ya, Buka Sesi</button>
-        </div>
-      </div>
-    </div>
-
     <div v-if="showPresensiModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div class="bg-white w-[300px] p-5 rounded-[10px] shadow-xl relative border border-gray-100">
         <button class="absolute top-2 right-3 text-gray-400 hover:text-black text-[20px]" @click="showPresensiModal = false">×</button>
@@ -461,8 +441,8 @@ onMounted(() => {
         
         <select v-model="statusPresensi" class="w-full border border-gray-200 bg-white p-2 rounded-[6px] mb-4 text-[12px] outline-none focus:border-blue-900 text-gray-700">
           <option disabled value="">-- Pilih Status --</option>
-          <option value="hadir">Hadir</option>
-          <option value="izin">Izin</option>
+          <option value="hadir">Hadir (Mengajar)</option>
+          <option value="izin">Izin Resmi</option>
           <option value="sakit">Sakit</option>
         </select>
         
