@@ -261,6 +261,30 @@ const closeModal = () => {
   selectedJadwal.value = { id: "", mataKuliah: "", number: "" };
   topikKelas.value = "";
 };
+
+const openAturanNilai = () => {
+  console.log("Buka halaman aturan nilai");
+
+  router.push({
+    path: "/aturan-nilai",
+    query: {
+      class_id: classId.value,
+      kode: mataKuliahKode.value,
+      pengampuId: pengampuId.value
+    }
+  });
+};
+
+const lihatNilai = () => {
+  router.push({
+    path: "/nilai",
+    query: {
+      classId: route.query.classId,
+      kode: route.query.kode,
+      namaKelas: route.query.namaKelas,
+    },
+  });
+};
 </script>
 
 <template>
@@ -275,17 +299,40 @@ const closeModal = () => {
     <h1 class="text-[20px] font-semibold mb-2">{{ infoKelas.mataKuliah }}</h1>
     <p class="text-[13px] font-semibold mt-1">Kelas : {{ infoKelas.kelas }}</p>
 
-    <div class="flex items-center gap-6 mt-2 text-[12px] text-gray-600">
-      <div class="flex items-center gap-2">
-        <User class="w-4 h-4" /> <span>{{ infoKelas.dosen }}</span>
+    <div class="flex items-center justify-between mt-2 text-[12px] text-gray-600">
+      <div class="flex items-center gap-6">
+        <div class="flex items-center gap-2">
+          <User class="w-4 h-4" />
+          <span>{{ infoKelas.dosen }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Clock class="w-4 h-4" />
+          <span>{{ infoKelas.waktu }}</span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <Users class="w-4 h-4" />
+          <span>{{ totalMahasiswa }} Peserta</span>
+        </div>
       </div>
-      <div class="flex items-center gap-2">
-        <Clock class="w-4 h-4" /> <span>{{ infoKelas.waktu }}</span>
-      </div>
-      <div class="flex items-center gap-2">
-        <Users class="w-4 h-4" /> <span>{{ totalMahasiswa }} Peserta</span>
-      </div>
-    </div>
+
+      <div class="flex gap-2">
+  <button
+    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+    @click="lihatNilai"
+  >
+    Lihat Nilai
+  </button>
+
+  <button
+    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+    @click="openAturanNilai"
+  >
+    Aturan Nilai
+  </button>
+</div>
+    </div>    
   </div>
 
   <div class="bg-gray-100 min-h-screen flex gap-4 mt-4">
