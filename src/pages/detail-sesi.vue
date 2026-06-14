@@ -1,22 +1,25 @@
 <script setup>
 import adminLayout from "./adminLayout.vue";
-import { useRoute, RouterLink } from "vue-router";
+import { useRoute, useRouter, RouterLink } from "vue-router";
 import { Search, UserRound, Download, Trash2, Eye, ClipboardCheck } from "lucide-vue-next";
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, reactive } from "vue";
 import { kelasService } from "../services/kelas";
 import { materiService } from "../services/materi.js";
 
 const route = useRoute();
+const router = useRouter();
 
 const mataKuliahKode = route.query.kode;
-const pengampuId = route.query.pengampuId;
-const classId = route.query.class_id;
+const pengampuId = route.query.pengampuId || route.query.pengampu_id;
+const classId = route.query.class_id || route.query.classId;
+const sesiId = route.query.id; // ID Sesi Aktif saat ini
 
 const {
   getMahasiswaKelas,
   postPresensiMahasiswa,
   updatePresensiMahasiswa,
   getPresensiMahasiswa,
+  updateJadwal // Ambil fungsi updateJadwal dari kelasService
 } = kelasService();
 
 const { 
@@ -54,9 +57,13 @@ const fileInput = ref(null);
 const tugasList = ref([]); 
 const showTugasModal = ref(false);
 const uploadedTugasFiles = ref([]); 
-const judulTugas = ref("");
-const deskripsiTugas = ref("");
-const deadlineTugas = ref("");
+
+// Dibungkus ke reactive object agar tersambung sempurna dengan v-model di template
+const formTugas = reactive({
+  title: "",
+  description: "",
+  deadline: ""
+});
 
 // Submission State (Fitur Baru Pop-up Tugas)
 const showSubmissionModal = ref(false);
@@ -243,39 +250,54 @@ const submitMateri = async () => {
 };
 
 const submitTugas = async () => {
+  if (!formTugas.title || !formTugas.description || !formTugas.deadline) {
+    alert("Semua field tugas wajib diisi!");
+    return;
+  }
+
   try {
-    const classSessionId = route.query.id;
+    // FORMATTING VALIDASI DEADLINE 422: Mengubah format "YYYY-MM-DDTHH:mm" menjadi "YYYY-MM-DD HH:mm"
+    const deadlineDiformat = formTugas.deadline.replace('T', ' ');
 
-    if (!judulTugas.value || !deskripsiTugas.value || !deadlineTugas.value) {
-      alert("Mohon lengkapi judul, deskripsi, dan deadline tugas!");
-      return;
-    }
-
+    // Susun payload sesuai dengan dokumentasi data model backend Anda
     const payload = {
-      file_uuids: fileUuids.value,
-      title: judulTugas.value,
-      description: deskripsiTugas.value,
-      deadline: deadlineTugas.value
+      title: formTugas.title,
+      description: formTugas.description,
+      deadline: deadlineDiformat,
+      file_uuids: fileUuids.value // Menyertakan uuid file pendukung yang dipilih dari media library
     };
 
-    const res = await tambahTugas(classSessionId, payload);
-    
-    if (res?.success || res?.code === 200 || res?.data) {
-      alert("Tugas kuliah berhasil ditambahkan!");
-      showTugasModal.value = false;
+    const idSesiTarget = route.query.id || sesiId;
+    const res = await tambahTugas(idSesiTarget, payload);
 
-      judulTugas.value = "";
-      deskripsiTugas.value = "";
-      deadlineTugas.value = "";
+    if (res?.success || res?.code === 200 || res?.status === 201 || res?.status === 200) {
+      alert("Tugas baru berhasil ditambahkan!");
+      
+      // Reset form dan state media picker
+      formTugas.title = "";
+      formTugas.description = "";
+      formTugas.deadline = "";
       uploadedTugasFiles.value = [];
       fileUuids.value = [];
       selectedFileUuids.value = [];
 
+      showTugasModal.value = false;
       await fetchTugas();
+    } else {
+      alert("Gagal menambahkan tugas.");
     }
-  } catch (err) {
-    console.error("Gagal menambah tugas:", err);
-    alert("Terjadi kesalahan sistem saat menyimpan data tugas.");
+  } catch (error) {
+    console.error("❌ Gagal menambah tugas:", error);
+    if (error.response && error.response.data) {
+      const errorBackend = error.response.data;
+      if (errorBackend.errors && errorBackend.errors.deadline) {
+        alert(`Gagal format tanggal: ${errorBackend.errors.deadline[0]}`);
+      } else {
+        alert(`Gagal: ${errorBackend.message || 'Terjadi kesalahan server'}`);
+      }
+    } else {
+      alert("Terjadi kesalahan sistem saat menambah tugas.");
+    }
   }
 };
 
@@ -465,7 +487,50 @@ const ubahStatus = async (mahasiswa, statusBaru) => {
   }
 };
 
-const tutupSesi = () => { console.log("Sesi ditutup"); };
+// ==========================================
+// LOGIKA TUTUP SESI (VERSI AWAL - MENUNGGU FIX BACKEND)
+// ==========================================
+const tutupSesi = async () => {
+  const konfirmasi = confirm("Apakah Anda yakin ingin menutup sesi perkuliahan ini?");
+  if (!konfirmasi) return;
+
+  try {
+    const idSesiTarget = sesiId || route.query.sesi_id; 
+    if (!idSesiTarget) {
+      alert("ID Sesi tidak ditemukan.");
+      return;
+    }
+
+    const payload = { 
+      status: "closed" 
+    };
+    
+    const res = await updateJadwal(idSesiTarget, payload);
+
+    if (res?.success || res?.code === 200 || res?.status === 200) {
+      alert("Sesi perkuliahan berhasil ditutup!");
+      
+      router.push({
+        path: "/detail-kelas",
+        query: {
+          classId: classId,
+          class_id: classId,
+          kode: mataKuliahKode,
+          pengampuId: pengampuId
+        }
+      });
+    } else {
+      alert("Gagal memperbarui status penutupan sesi.");
+    }
+  } catch (error) {
+    console.error("❌ Gagal menutup sesi:", error);
+    if (error.response && error.response.data) {
+      alert(`Gagal menutup sesi: ${error.response.data.message || 'Error Server'}`);
+    } else {
+      alert("Terjadi kesalahan sistem saat mencoba menutup sesi.");
+    }
+  }
+};
 </script>
 
 <template>
@@ -646,15 +711,15 @@ const tutupSesi = () => { console.log("Sesi ditutup"); };
         </div>
         <div class="space-y-1">
           <label class="font-semibold block">Judul Tugas</label>
-          <input v-model="judulTugas" type="text" placeholder="Masukkan judul tugas" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"/>
+          <input v-model="formTugas.title" type="text" placeholder="Masukkan judul tugas" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"/>
         </div>
         <div class="space-y-1">
           <label class="font-semibold block">Deskripsi Tugas</label>
-          <textarea v-model="deskripsiTugas" rows="3" placeholder="Masukkan deskripsi tugas" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"></textarea>
+          <textarea v-model="formTugas.description" rows="3" placeholder="Masukkan deskripsi tugas" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"></textarea>
         </div>
         <div class="space-y-1">
           <label class="font-semibold block">Tanggal Deadline</label>
-          <input v-model="deadlineTugas" type="date" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"/>
+          <input v-model="formTugas.deadline" type="datetime-local" class="w-full px-3 py-2 border rounded text-[12px] focus:outline-none focus:border-blue-500"/>
         </div>
         <div class="space-y-2">
           <label class="font-semibold block">Dokumen Pendukung</label>
