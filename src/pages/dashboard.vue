@@ -287,7 +287,7 @@ onMounted(() => {
       </div>
       
       <div class="w-[500px] flex flex-col space-y-5">
-        <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-5">
+        <!-- <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-5">
           <h1 class="text-[14px] font-bold text-gray-800 mb-3">REKAP PRESENSI HARI INI</h1>
 
           <div class="bg-blue-50/70 rounded-[8px] p-2 flex items-center gap-3 mb-4 w-fit px-4 border border-blue-100/50">
@@ -313,7 +313,7 @@ onMounted(() => {
               <p class="text-[11px] font-medium text-gray-400 text-right">{{ item.percent }}</p>
             </div>
           </div>
-        </div>
+        </div> -->
 
         <div class="bg-white shadow-sm border border-gray-100 rounded-[10px] p-4">
           <h3 class="font-bold text-[14px] text-gray-800 mb-4">Kalender Akademik</h3>

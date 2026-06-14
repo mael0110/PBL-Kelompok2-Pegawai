@@ -7,7 +7,8 @@ import krs from "../pages/krs.vue";
 import Biodata from "../pages/biodata.vue";
 import detailSesi from "../pages/detail-sesi.vue";
 import detailKelas from "../pages/detail-kelas.vue";
-import aturanNilai from "../pages/aturan-nilai.vue"
+import aturanNilai from "../pages/aturan-nilai.vue";
+import Nilai from "../pages/nilai.vue";
 
 const routes = [
   { path: "/", redirect: "/login" },
@@ -18,7 +19,8 @@ const routes = [
   { path: "/biodata", name: "biodata", component: Biodata },
   { path: "/detail-sesi", name: "detail-sesi", component: detailSesi},
   { path: "/detail-kelas", name: "detail-kelas", component: detailKelas },
-  { path: "/aturan-nilai", name: "aturan-nilai", component: aturanNilai}
+  { path: "/aturan-nilai", name: "aturan-nilai", component: aturanNilai},
+  { path: "/nilai", name: "nilai", component: Nilai}
 ];
 
 

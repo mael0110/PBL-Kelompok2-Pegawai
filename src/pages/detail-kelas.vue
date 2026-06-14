@@ -279,9 +279,10 @@ const lihatNilai = () => {
   router.push({
     path: "/nilai",
     query: {
-      classId: route.query.classId,
-      kode: route.query.kode,
+      class_id: classId.value,
+      kode: mataKuliahKode.value,
       namaKelas: route.query.namaKelas,
+
     },
   });
 };

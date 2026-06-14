@@ -14,16 +14,14 @@ export const nilaiService = () => {
         }
       });
 
-      const result = response.data; // Memperbaiki kesalahan typo sintaksis sebelumnya
+      const result = response.data;
 
-      // Sesuai format JSON: Cek field "success" dan pastikan "data" berupa Array
       if (result.success && Array.isArray(result.data)) {
-        // Cari data yang course_code-nya cocok dengan parameter halaman saat ini
         const spesifikMatkul = result.data.find(item => item.course_code === courseCode);
         
         return {
           success: true,
-          data: spesifikMatkul || null // Mengembalikan objek tunggal mata kuliah jika ketemu
+          data: spesifikMatkul || null
         };
       }
 
@@ -52,7 +50,7 @@ export const nilaiService = () => {
     }
   };
 
-  // 3. Edit data aturan nilai yang sudah ada berdasarkan ID (PUT)
+  // 3. Edit data aturan nilai (PUT)
   const updateAturanNilai = async (gradeSettingId, payload) => {
     try {
       const token = localStorage.getItem("token");
@@ -70,9 +68,89 @@ export const nilaiService = () => {
     }
   };
 
+  // 4. Download Template Excel (POST)
+  const downloadTemplateNilai = async (payload) => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await axios.post(
+        `https://api-pegawai-4a.akufarish.my.id:1234/api/grade-exports`,
+        payload,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          responseType: "blob", 
+        }
+      );
+
+      const blob = new Blob([res.data], { 
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `Template_Nilai_${payload.class_name || 'Kelas'}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      return res.data;
+    } catch (error) {
+    console.error("❌ Axios Error Mentah:", error);
+
+    // Cek jika error memiliki response berupa Blob JSON
+    if (error.response && error.response.data instanceof Blob) {
+      const reader = new FileReader();
+      
+      reader.onload = () => {
+        try {
+          // Mengubah text blob menjadi JSON objek agar bisa dibaca di konsol
+          const errorPesan = JSON.parse(reader.result);
+          console.log("🔥 PESAN ERROR VALIDASI DARI BACKEND:", errorPesan);
+          alert("Gagal: " + (errorPesan.message || "Validasi backend gagal. Cek konsol."));
+        } catch (e) {
+          console.log("Isi teks error (bukan JSON):", reader.result);
+        }
+      };
+      
+      reader.readAsText(error.response.data);
+    } else {
+      console.error("Gagal mendownload template:", error.message);
+      alert("Gagal mendownload template: " + error.message);
+    }
+      throw error;
+    }
+  };
+
+  // 5. Ambil daftar mahasiswa berdasarkan ID Kelas (Dinamis tanpa Hardcode URL)
+  const getMahasiswaByKelas = async (classId) => {
+    const token = localStorage.getItem("token");
+    try {
+      const res = await axios.get(
+        `https://be.karlearn.site/api/kelas/${classId}/mahasiswa`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      console.log("data mahasiswa", res.data)
+      return res.data; 
+    } catch (error) {
+      console.error("Gagal ambil mahasiswa:", error.response?.data || error);
+      return { success: false, data: [] };
+    }
+  };
+
   return {
     getAturanNilai,
     createAturanNilai,
-    updateAturanNilai
+    updateAturanNilai,
+    downloadTemplateNilai,
+    getMahasiswaByKelas
   };
 };
