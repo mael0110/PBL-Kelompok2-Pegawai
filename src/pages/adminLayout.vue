@@ -68,7 +68,6 @@ const tutupLogoutModal = () => {
         <nav class="space-y-2 flex-1">
           <RouterLink to="/dashboard" class="menu-link"><LayoutDashboard :size="16" /><span>Dashboard</span></RouterLink>
           <RouterLink to="/kelas" class="menu-link"><BookOpen :size="16" /><span>Kelas</span></RouterLink>
-          <RouterLink to="/penilaian" class="menu-link"><CircleCheck :size="16" /><span>Penilaian</span></RouterLink>
           <RouterLink to="/krs" class="menu-link"><MonitorCheck :size="16" /><span>Validasi KRS</span></RouterLink>
           <RouterLink to="/biodata" class="menu-link"><UserRound :size="16" /><span>Profile</span></RouterLink>
         </nav>
