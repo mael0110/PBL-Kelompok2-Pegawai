@@ -2,7 +2,6 @@ import axios from "axios";
 
 export const nilaiService = () => {
   
-  // 1. Ambil data aturan nilai berdasarkan kode mata kuliah
   const getAturanNilai = async (courseCode) => {
     try {
       const token = localStorage.getItem("token");
@@ -32,7 +31,6 @@ export const nilaiService = () => {
     }
   };
 
-  // 2. Tambah data aturan nilai baru (POST)
   const createAturanNilai = async (payload) => {
     try {
       const token = localStorage.getItem("token");
@@ -50,7 +48,6 @@ export const nilaiService = () => {
     }
   };
 
-  // 3. Edit data aturan nilai (PUT)
   const updateAturanNilai = async (gradeSettingId, payload) => {
     try {
       const token = localStorage.getItem("token");
@@ -68,7 +65,6 @@ export const nilaiService = () => {
     }
   };
 
-  // 4. Download Template Excel (POST)
   const downloadTemplateNilai = async (payload) => {
     const token = localStorage.getItem("token");
     try {
@@ -101,13 +97,11 @@ export const nilaiService = () => {
     } catch (error) {
     console.error("❌ Axios Error Mentah:", error);
 
-    // Cek jika error memiliki response berupa Blob JSON
     if (error.response && error.response.data instanceof Blob) {
       const reader = new FileReader();
       
       reader.onload = () => {
         try {
-          // Mengubah text blob menjadi JSON objek agar bisa dibaca di konsol
           const errorPesan = JSON.parse(reader.result);
           console.log("🔥 PESAN ERROR VALIDASI DARI BACKEND:", errorPesan);
           alert("Gagal: " + (errorPesan.message || "Validasi backend gagal. Cek konsol."));
@@ -125,12 +119,12 @@ export const nilaiService = () => {
     }
   };
 
-  // 5. Ambil daftar mahasiswa berdasarkan ID Kelas (Dinamis tanpa Hardcode URL)
-  const getMahasiswaByKelas = async (classId) => {
-    const token = localStorage.getItem("token");
+  const getMahasiswaByKelas = async () => {
     try {
+      const token = localStorage.getItem("token");
+
       const res = await axios.get(
-        `https://be.karlearn.site/api/kelas/${classId}/mahasiswa`,
+        "https://api-mahasiswa-4a.akufarish.my.id:8874/api/mahasiswa",
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -138,14 +132,19 @@ export const nilaiService = () => {
           },
         }
       );
-      console.log("data mahasiswa", res.data)
-      return res.data; 
+
+      console.log("DATA MAHASISWA:", res.data);
+
+      return res.data.data || [];
     } catch (error) {
-      console.error("Gagal ambil mahasiswa:", error.response?.data || error);
-      return { success: false, data: [] };
+      console.error(
+        "Gagal ambil mahasiswa:",
+        error.response?.data || error
+      );
+
+      return [];
     }
   };
-
   return {
     getAturanNilai,
     createAturanNilai,

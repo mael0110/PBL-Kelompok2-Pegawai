@@ -3,81 +3,65 @@ import adminLayout from "./adminLayout.vue";
 import { ref, computed, onMounted } from "vue";
 import { Upload, Download } from "lucide-vue-next";
 import { nilaiService } from "../services/nilai";
-import { kelasService } from "../services/kelas"; 
 import { useRoute, useRouter, RouterLink } from "vue-router";
 
 const route = useRoute();
 const router = useRouter();
 
-const { downloadTemplateNilai } = nilaiService();
-const { getMahasiswaKelas } = kelasService(); 
+// Menggunakan service getMahasiswaByKelas dari nilaiService sesuai API baru
+const { downloadTemplateNilai, getMahasiswaByKelas } = nilaiService(); 
 
-// --- PARAMETER RUTE ASLI DARI URL ---
-const classId = computed(() => route.query.id || route.query.class_id || "");
+// --- PARAMETER RUTE DINAMIS ---
+const classId = computed(() => route.query.class_id || route.query.classId || route.query.id || "");
 const mataKuliahKode = computed(() => route.query.kode || route.query.course_code || "");
-const pengampuId = computed(() => route.query.pengampuId || "");
+const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
 
-// State penampung metadata murni dari backend (Bukan dummy lagi)
-const namaMataKuliah = ref("");
-const namaKelas = ref("");
+const namaMataKuliah = ref("Mata Kuliah");
+const namaKelas = ref("Kelas");
 
 const file = ref(null);
 const loading = ref(false);
 const nilaiData = ref([]); 
 
 /* =========================
-   1. AMBIL DATA MAHASISWA & METADATA KELAS ASLI
+   1. SINKRONISASI DATA MAHASISWA (FIX SESUAI RESPON API BARU)
 ========================= */
 const fetchMahasiswaDariKelas = async () => {
-  if (!classId.value) {
-    console.warn("⚠️ Class ID tidak ditemukan di parameter URL.");
-    return;
-  }
-  
   loading.value = true;
   try {
-    const res = await getMahasiswaKelas(classId.value);
-    console.log("🟢 RESPONSE MENTAH GET MAHASISWA KELAS:", res);
+    const res = await getMahasiswaByKelas();
+    console.log("🟢 RESPONSE ASLI DARI API MAHASISWA:", res);
 
-    // Pastikan dataMentah berupa array pembungkus pivot
+    // Mengantisipasi jika service langsung mengembalikan array data atau berupa object wrapper
     const dataMentah = Array.isArray(res) ? res : (res?.data || []);
     
     if (dataMentah && dataMentah.length > 0) {
-      // 📝 CARI METADATA KELAS DAN MATKUL ASLI DARI HASIL RESPONSE API KELAS
-      // Biasanya ada di objek item pertama (index 0) di dalam properti kelas/matkul bawaan backend
-      const contohItem = dataMentah[0];
-      
-      // Ambil nama kelas murni dari database (sesuaikan alternatif key dari backend kamu)
-      namaKelas.value = contohItem?.kelas?.nama_kelas || contohItem?.class_name || route.query.namaKelas || "4A";
-      
-      // Ambil nama matkul murni dari database
-      namaMataKuliah.value = contohItem?.kelas?.mata_kuliah?.nama_matkul || contohItem?.course_name || route.query.namaMatkul || "Administrasi Database";
+      // Mapping field disesuaikan 100% dengan properti JSON baru Anda
+      nilaiData.value = dataMentah.map(m => {
+        console.log(`🔍 Mapping Mahasiswa -> Nama: ${m.nama_mahasiswa}, NIM: ${m.nim}, ID: ${m.id_mahasiswa}`);
 
-      // Ekstraksi data array mahasiswa pivot tanpa dummy
-      nilaiData.value = dataMentah.flatMap(item => {
-        if (item.mahasiswa && Array.isArray(item.mahasiswa)) {
-          return item.mahasiswa.map(m => ({
-            id: String(m.id || ''),
-            nim: String(m.nim || ''), 
-            nama: String(m.name || m.nama || ''),
-            tugas: Number(item.tugas ?? 0),
-            quiz: Number(item.quiz ?? 0),
-            uts: Number(item.uts ?? 0),
-            uas: Number(item.uas ?? 0),
-            nilaiAkhir: Number(item.final_score || item.nilai_akhir || 0),
-            grade: String(item.grade || '-')
-          }));
-        }
-        return [];
+        return {
+          id: String(m.id_mahasiswa || ''),
+          nim: String(m.nim || ''), 
+          nama: String(m.nama_mahasiswa || ''),
+          
+          // Karena data nilai terpisah dari API daftar mahasiswa ini, 
+          // kita set default ke 0 / '-' agar siap di-update saat upload nilai.
+          tugas: 0,
+          quiz: 0,
+          uts: 0,
+          uas: 0,
+          nilaiAkhir: 0,
+          grade: '-'
+        };
       });
 
-      console.log("🔥 DATA NILAI MAHASISWA SINKRON:", nilaiData.value);
+      console.log("🔥 HASIL MAP AKHIR UNTUK TABEL & TEMPLATE:", nilaiData.value);
     } else {
-      console.warn("⚠️ Data mahasiswa kosong pada kelas ini.");
       nilaiData.value = [];
     }
   } catch (err) {
-    console.error("❌ Gagal memuat list mahasiswa via getMahasiswaKelas:", err);
+    console.error("❌ Gagal mengambil data mahasiswa:", err);
     nilaiData.value = [];
   } finally {
     loading.value = false;
@@ -85,28 +69,52 @@ const fetchMahasiswaDariKelas = async () => {
 };
 
 /* =========================
-   DOWNLOAD TEMPLATE (100% VALUE REAL DATABASE)
+   2. FILE MANAGEMENT
+========================= */
+const handleFileChange = (e) => {
+  if (e.target.files && e.target.files[0]) {
+    file.value = e.target.files[0];
+  }
+};
+
+const uploadNilai = async () => {
+  if (!file.value) return;
+  loading.value = true;
+  try {
+    // Tambahkan logika pengiriman file ke backend Anda di sini jika ada service upload
+    alert(`File ${file.value.name} berhasil dipilih. Mengompres data...`);
+    file.value = null;
+    await fetchMahasiswaDariKelas();
+  } catch (err) {
+    console.error("❌ Gagal upload nilai:", err);
+  } finally {
+    loading.value = false;
+  }
+};
+
+/* =========================
+   3. DOWNLOAD TEMPLATE
 ========================= */
 const handleDownloadTemplate = async () => {
   if (nilaiData.value.length === 0) {
-    alert("Daftar mahasiswa kosong. Tidak bisa mendownload template untuk kelas ini.");
+    alert("Daftar mahasiswa kosong. Tidak bisa mendownload template.");
     return;
   }
 
   loading.value = true;
   try {
-    // Potong kode matkul maksimal 10 karakter sesuai aturan validator backend
-    let validCourseCode = mataKuliahKode.value;
-    if (validCourseCode.length > 10) {
-      validCourseCode = validCourseCode.substring(0, 10);
+    let rawCode = mataKuliahKode.value || route.query.kode || "MK-001";
+    if (rawCode.length > 10) {
+      console.warn(`⚠️ Kode matkul "${rawCode}" dipotong karena melebihi batas maksimal 10 karakter.`);
+      rawCode = rawCode.substring(0, 10);
     }
 
-    // Susun payload dinamis menggunakan nama kelas & matkul asli yang didapat dari database
+    // Payload bersih yang memetakan id, nim, dan nama ke format backend ekspor
     const payload = {
-      course_code: validCourseCode,
-      course_name: namaMataKuliah.value, 
+      course_code: rawCode,
+      course_name: route.query.namaMatkul || namaMataKuliah.value || "Mata Kuliah",
       class_id: classId.value,
-      class_name: namaKelas.value, 
+      class_name: route.query.namaKelas || namaKelas.value || "Kelas",
       students: nilaiData.value.map((m) => ({
         student_id: m.id, 
         nim: m.nim,
@@ -114,47 +122,11 @@ const handleDownloadTemplate = async () => {
       }))
     };
 
-    console.log("🚀 PAYLOAD DINAMIS DIKIRIM KE BACKEND:", payload);
-    
-    // Kirim request unduh berkas ke API
+    console.log("🚀 PAYLOAD DIKIRIM KE EXPORT API:", payload);
     await downloadTemplateNilai(payload);
     
   } catch (error) {
     console.error("❌ Gagal mendownload template:", error);
-    
-    // Bongkar pesan error blob jika validator backend menolak kembali
-    if (error.response && error.response.data instanceof Blob) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const errorPesan = JSON.parse(reader.result);
-          console.log("🔥 DETAIL KESALAHAN VALIDASI BACKEND:", errorPesan);
-          alert("Gagal download: " + JSON.stringify(errorPesan.errors || errorPesan.message));
-        } catch (e) {
-          console.log("Error teks biasa:", reader.result);
-        }
-      };
-      reader.readAsText(error.response.data);
-    } else {
-      alert("Terjadi kesalahan sistem: " + error.message);
-    }
-  } finally {
-    loading.value = false;
-  }
-};
-
-const handleFileChange = (e) => {
-  file.value = e.target.files[0];
-};
-
-const uploadNilai = async () => {
-  if (!file.value) return;
-  loading.value = true;
-  try {
-    file.value = null;
-    await fetchMahasiswaDariKelas();
-  } catch (err) {
-    console.error(err);
   } finally {
     loading.value = false;
   }
@@ -163,7 +135,7 @@ const uploadNilai = async () => {
 const kembaliKeDetailKelas = () => {
   router.push({
     path: "/detail-kelas",
-    query: { id: classId.value, kode: mataKuliahKode.value, pengampuId: pengampuId.value }
+    query: { id: classId.value, pengampuId: pengampuId.value, kode: mataKuliahKode.value }
   });
 };
 
@@ -185,12 +157,9 @@ onMounted(() => {
                   <span class="mx-2 text-gray-400">&gt;</span> 
                   <span class="text-gray-400">Nilai Mahasiswa</span>
               </p>
-              <h1 class="text-[20px] font-bold text-slate-800 uppercase mb-1">NILAI MAHASISWA</h1>
-              <p class="text-[13px] text-slate-600 font-medium">
-                {{ namaMataKuliah }} — {{ namaKelas }} ({{ mataKuliahKode }})
-              </p>
+              <h1 class="text-[20px] font-bold text-slate-800 uppercase mb-3">NILAI MAHASISWA</h1>
           </div>
-          <button @click="kembaliKeDetailKelas" class="bg-gray-200 text-slate-700 px-4 py-2 rounded text-[12px] font-semibold mt-2 hover:bg-gray-300">
+          <button @click="kembaliKeDetailKelas" class="bg-gray-200 text-slate-700 px-4 py-2 rounded text-[12px] font-semibold mt-4 hover:bg-gray-300">
               Kembali
           </button>
       </div>
@@ -214,7 +183,7 @@ onMounted(() => {
       </div>
 
       <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-        <div v-if="loading" class="p-8 text-center text-gray-400 text-[13px]">Memuat data mahasiswa murni dari database...</div>
+        <div v-if="loading" class="p-8 text-center text-gray-400 text-[13px]">Memuat data mahasiswa...</div>
         <table v-else class="w-full text-[13px]">
           <thead class="bg-blue-50 text-slate-800 border-b border-gray-200 font-semibold">
             <tr>
@@ -231,7 +200,7 @@ onMounted(() => {
           <tbody class="text-slate-900">
             <tr v-if="nilaiData.length === 0">
                 <td colspan="8" class="p-8 text-center text-gray-400 italic bg-gray-50/20">
-                    Tidak ada data mahasiswa terdaftar di dalam kelas ini.
+                    Tidak ada data mahasiswa pada kelas ini atau database kosong.
                 </td>
             </tr>
             <tr v-else v-for="(item, i) in nilaiData" :key="i" class="border-b border-gray-100 hover:bg-gray-50/50">

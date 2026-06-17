@@ -17,6 +17,7 @@ export function authService() {
     }
 
     return res.data;
+      
   }
 
   async function logout() {
