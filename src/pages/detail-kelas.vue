@@ -54,7 +54,7 @@ const fetchSesiPelajaran = async () => {
   if (!pengampuId.value) return;
 
   try {
-    const res = await getSesiPengampu(pengampuId.value, currentPage.value);
+    const res = await getSesiPengampu(pengampuId.value, classId.value, currentPage.value);
 
     const list = res ?? [];
 
