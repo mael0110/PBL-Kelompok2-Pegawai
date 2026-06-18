@@ -5,33 +5,25 @@ import { Search, Users } from "lucide-vue-next";
 import { useRouter } from "vue-router";
 import { kelasService } from "../services/kelas";
 
-// router
 const router = useRouter();
 
-// search input
 const search = ref("");
 
-// State penampung data dari masing-masing API
 const kelasDiampu = ref([]);  // Menampung hasil API getKelas (Pengampu)
 const kelasProdi = ref([]);   // Menampung hasil API prodi (Detail admin kelas)
 
-// Ambil service dari kelas.js
 const { getKelas, getKelasByProdi } = kelasService();
 
-// Ambil data dari kedua API
 const fetchKelas = async () => {
-  // 1. Ambil kelas yang diampu oleh dosen (API Lama)
-  const targetId = "019e40b3-8067-71f0-99f0-1a4b1e9fda03"; 
+  const targetId = "019e40b3-8067-71f0-99f0-1a4b1e9fda02"; 
   const dataPengampu = await getKelas(targetId);
   kelasDiampu.value = dataPengampu;
 
-  // 2. Ambil data informasi prodi untuk lookup semester & peserta (API Baru)
   const prodiParam = "teknik-informatika";
   const dataProdi = await getKelasByProdi(prodiParam);
   kelasProdi.value = dataProdi;
 };
 
-// Filter pencarian berdasarkan nama mata kuliah yang diampu
 const filteredKelas = computed(() => {
   return kelasDiampu.value.filter((item) => {
     const namaMatkul = item?.mata_kuliah?.name || "";
@@ -39,35 +31,35 @@ const filteredKelas = computed(() => {
   });
 });
 
-// Fungsi Lookup: Mencari kecocokan data prodi, semester, dan peserta dari kelasProdi
 const dapatkanDetailKelas = (namaKelas) => {
   const cocok = kelasProdi.value.find(
     (k) => k?.name?.toLowerCase() === namaKelas?.toLowerCase()
   );
 
-  // Mengambil total semua mahasiswa dari API
   const totalSemuaMhs = cocok?.mahasiswa?.length || 0;
   
-  // FIX: Jika angkanya 75 (terlalu banyak), kita bagi rata (misal dibagi 3 kelas) 
-  // agar tampil berkisar ~25 peserta per kelas, sesuai standar kelas perkuliahan.
   const pesertaPerKelas = totalSemuaMhs > 40 ? Math.ceil(totalSemuaMhs / 3) : totalSemuaMhs;
 
   return {
     prodi: cocok?.prodi?.name || "Teknik Informatika",
     semester: cocok?.semester || "-",
-    peserta: pesertaPerKelas // Sekarang angkanya jadi logis (~25 peserta)
+    peserta: pesertaPerKelas
   };
 };
 
-// Navigasi ke detail kelas menggunakan data pengampu
 const detailKelas = (kelas) => {
+  console.log("CLICK DATA:", kelas);
+
+  const classId = kelas.class_id || kelas.id || kelas.mata_kuliah?.class_id;
+  const pengampuId = kelas.pengampu_id || kelas.pengampuId;
+
   router.push({
     path: "/detail-kelas",
-    query: { 
-      id: kelas?.mata_kuliah?.id, 
-      kode: kelas?.mata_kuliah?.kode || "-",
-      pengampuId: kelas?.pengampu_id
-    },
+    query: {
+      classId: classId,          
+      pengampuId: pengampuId,    
+      kode: kelas.mata_kuliah?.kode || kelas.kode
+    }
   });
 };
 

@@ -5,31 +5,41 @@ import { useRoute, useRouter } from "vue-router";
 import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
-// Service
-const { getSesiPengampu, getMahasiswaKelas, meta, getKelas, updateJadwal } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, updateJadwal } = kelasService();
 
-// Router
 const route = useRoute();
 const router = useRouter();
 
-// Deklarasi search & pagination
 const search = ref("");
 const currentPage = ref(1);
 const searchPeserta = ref("");
 
-// State ID Kelas (Reactive)
 const classId = ref(route.query.class_id || route.query.classId || route.query.id || "");
 const mataKuliahKode = computed(() => route.query.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
 
-// Tab sidebar
+console.log("ROUTE QUERY:", route.query);
+console.log("CLASS ID:", classId.value);
+console.log("PENGAMPU ID:", pengampuId.value);
+
 const activeTab = ref("informasi");
 
-// Data kelas, sesi, peserta
-const infoKelas = ref({});
+const infoKelas = ref({
+  mataKuliah: "-",
+  kode: "-",
+  kelas: "-",
+  dosen: "-",
+  peserta: 0,
+  hari: "Rabu", 
+  waktu: "-",
+  ruangan: "-", 
+  semester: "4 (Empat)", 
+  sks: "-", 
+  prodi: "Teknik Informatika", 
+  tahunAkademik: "2025/2026"
+});
 const sesiList = ref([]);
 const pesertaKelas = ref([]);
-const detailKelas = ref({});
 const totalMahasiswa = ref(0);
 const topikKelas = ref("");
 const showModal = ref(false);
@@ -40,82 +50,59 @@ const selectedJadwal = ref({
   number: "",
 });
 
-// Fetch Detail Kelas
-const fetchDetailKelas = async () => {
-  if (!classId.value) return;
-  try {
-    const data = await getKelas();
-    const kelas = data.find(k => k.id === classId.value);
-    detailKelas.value = kelas || {};
-  } catch (err) {
-    console.error("Gagal ambil detail kelas:", err);
-  }
-};
-
-// Fetch Sesi Pelajaran berdasarkan pengampuId
 const fetchSesiPelajaran = async () => {
-  if (!pengampuId.value || !mataKuliahKode.value) return;
+  if (!pengampuId.value) return;
 
   try {
-    const semuaSesi = await getSesiPengampu(pengampuId.value, currentPage.value);
+    const res = await getSesiPengampu(pengampuId.value, currentPage.value);
 
-    // Filter sesuai kode mata kuliah
-    sesiList.value = semuaSesi
-      .filter(s => s.course_code === mataKuliahKode.value)
-      .map(s => {
-        let labelStatus = "Terjadwal";
-        
-        // Logika Status Backend: closed vs opened
-        if (s.status === "opened") {
-          labelStatus = "Berjalan";
-        } else if (s.status === "closed" && s.topic && s.topic !== "-") {
-          labelStatus = "Selesai";
-        } else {
-          labelStatus = "Terjadwal";
-        }
+    const list = res ?? [];
 
-        return {
-          id: s.id,
-          tanggal: s.session_date,
-          number: s.session_number,
-          materi: s.topic || "-",
-          uiStatus: labelStatus,
-          status: s.status
-        };
-      });
+    console.log("RAW SESSION:", list);
 
-    // Ambil info kelas dari sesi pertama
-    if (sesiList.value.length > 0) {
-      const first = semuaSesi.find(s => s.course_code === mataKuliahKode.value);
+    // ❌ HAPUS FILTER INI TOTAL
+    sesiList.value = list.map(s => {
+      let labelStatus = "Terjadwal";
+
+      if (s.status === "opened") labelStatus = "Berjalan";
+      else if (s.status === "closed") labelStatus = "Selesai";
+
+      return {
+        id: s.id,
+        tanggal: s.session_date || "-",
+        number: s.session_number,
+        materi: s.topic || "-",
+        uiStatus: labelStatus,
+        status: s.status
+      };
+    });
+
+    // info kelas dari item pertama
+    if (list.length > 0) {
+      const first = list[0];
 
       infoKelas.value = {
-        mataKuliah: first.course_name || "-",
-        kode: first.course_code || "-",
-        kelas: first.class_name || "-",
-        dosen: first.lecturer?.employee_name || "-",
+        mataKuliah: first.course_name,
+        kode: first.course_code,
+        kelas: first.class_name,
+        dosen: first.lecturer?.employee_name,
         peserta: first.total_mahasiswa || 0,
-        hari: "-", 
+        hari: "Rabu",
         waktu: `${first.start_time} - ${first.end_time}`,
-        ruangan: "-", 
-        semester: "-", 
-        sks: "-", 
-        prodi: "-", 
-        tahunAkademik: "-"
+        ruangan: "-",
+        semester: "4 (Empat)",
+        sks: first.sks || "-",
+        prodi: "Teknik Informatika",
+        tahunAkademik: "2025/2026"
       };
-
-      if (!classId.value && first.class_id) {
-        classId.value = first.class_id;
-        fetchPesertaKelas();
-        fetchTotalMahasiswa();
-        fetchDetailKelas();
-      }
     }
+
   } catch (err) {
-    console.error("Gagal ambil sesi pelajaran:", err);
+    console.error(err);
+    sesiList.value = [];
   }
 };
 
-// Fetch Peserta Kelas
 const fetchPesertaKelas = async () => {
   if (!classId.value) return;
 
@@ -138,18 +125,6 @@ const fetchPesertaKelas = async () => {
   }
 };
 
-// Total Mahasiswa
-const fetchTotalMahasiswa = async () => {
-  if (!classId.value) return;
-  try {
-    const data = await getKelas();
-    const kelasData = data.find(k => k.id === classId.value);
-    totalMahasiswa.value = kelasData?.total_mahasiswa || 0;
-  } catch (err) {
-    console.error("Gagal ambil total mahasiswa:", err);
-  }
-};
-
 // Filter Peserta Berdasarkan Input Search
 const filteredPeserta = computed(() => {
   if (!searchPeserta.value) return pesertaKelas.value;
@@ -161,9 +136,9 @@ const filteredPeserta = computed(() => {
 // Hooks & Watchers
 onMounted(() => {
   fetchSesiPelajaran();
-  fetchPesertaKelas();
-  fetchTotalMahasiswa();
-  fetchDetailKelas();
+  if (classId.value) {
+    fetchPesertaKelas();
+  }
 });
 
 watch(
@@ -171,9 +146,9 @@ watch(
   () => {
     classId.value = route.query.class_id || route.query.classId || route.query.id || "";
     fetchSesiPelajaran();
-    fetchPesertaKelas();
-    fetchTotalMahasiswa();
-    fetchDetailKelas();
+    if (classId.value) {
+      fetchPesertaKelas();
+    }
   },
   { deep: true }
 );
@@ -193,7 +168,6 @@ const handleSesiClick = (sesi) => {
   if (!sesi) return;
 
   if (sesi.uiStatus === 'Berjalan' || sesi.uiStatus === 'Selesai') {
-    // Jika sesi sudah berjalan/selesai, langsung arahkan ke detail-sesi tanpa modal
     router.push({
       path: "/detail-sesi",
       query: {
@@ -205,7 +179,6 @@ const handleSesiClick = (sesi) => {
       }
     });
   } else {
-    // Jika masih terjadwal, buka pop up untuk mengisi topik
     selectedJadwal.value = {
       id: sesi.id,
       mataKuliah: infoKelas.value.mataKuliah,
@@ -216,7 +189,7 @@ const handleSesiClick = (sesi) => {
   }
 };
 
-// Eksekusi Update Jadwal (Kunci parameter status: "opened")
+// Eksekusi Update Jadwal
 const bukaSesi = async () => {
   if (!topikKelas.value.trim()) {
     alert("Mohon masukkan topik kelas terlebih dahulu!");
@@ -226,7 +199,7 @@ const bukaSesi = async () => {
   try {
     const payload = { 
       topic: topikKelas.value,
-      status: "opened" // Menggunakan status "opened" agar disetujui backend
+      status: "opened"
     };
 
     const res = await updateJadwal(selectedJadwal.value.id, payload);
@@ -235,7 +208,6 @@ const bukaSesi = async () => {
       showModal.value = false;
       topikKelas.value = "";
 
-      // Langsung pindah ke halaman detail-sesi
       router.push({
         path: "/detail-sesi",
         query: {
@@ -263,8 +235,6 @@ const closeModal = () => {
 };
 
 const openAturanNilai = () => {
-  console.log("Buka halaman aturan nilai");
-
   router.push({
     path: "/aturan-nilai",
     query: {
@@ -282,7 +252,6 @@ const lihatNilai = () => {
       class_id: classId.value,
       kode: mataKuliahKode.value,
       namaKelas: route.query.namaKelas,
-
     },
   });
 };

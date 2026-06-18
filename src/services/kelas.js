@@ -4,26 +4,34 @@ import { ref } from "vue";
 export function kelasService() {
   const meta = ref({});
 
-  async function getSesiPengampu(pengampuId, page = 1) {
-    const token = localStorage.getItem("token");
-    try {
-      const res = await axios.get(
-        `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
-        {
-          params: { page },
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-      meta.value = res.data.meta;
-      return res.data.data || [];
-    } catch (error) {
-      console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
-      return [];
-    }
+  async function getSesiPengampu(pengampuId, classId, page = 1) {
+  const token = localStorage.getItem("token");
+
+  try {
+    const res = await axios.get(
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/class-sessions/pengampu/${pengampuId}`,
+      {
+        params: {
+          page: page,
+          // class_id: classId || ""  
+        },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    console.log("sesi pengampu:", res.data);
+
+    meta.value = res.data?.meta || {};
+    return res.data?.data || [];
+
+  } catch (error) {
+    console.error("Gagal ambil sesi pengampu:", error.response?.data || error);
+    return [];
   }
+}
 
   // API LAMA (Tetap Dipertahankan & Tidak Dihapus)
   async function getKelas(kelasId = "") {
@@ -91,7 +99,7 @@ export function kelasService() {
     const token = localStorage.getItem("token");
     try {
       const res = await axios.get(
-        `https://be.karlearn.site/api/kelas/019e5317-fd85-7b2d-b76a-abbe59efb201/mahasiswa`,
+        `https://be.karlearn.site/api/kelas/${kelasId}/mahasiswa`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
