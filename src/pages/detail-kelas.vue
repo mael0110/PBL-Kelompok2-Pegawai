@@ -50,7 +50,7 @@ const selectedJadwal = ref({
   number: "",
 });
 
-// 🔥 FUNGSI HELPER: Mengubah session_date YYYY-MM-DD menjadi nama hari Indonesia
+// FUNGSI HELPER: Mengubah session_date YYYY-MM-DD menjadi nama hari Indonesia
 const konversiKeHari = (dateString) => {
   if (!dateString || dateString === "-") return "-";
   try {
@@ -68,24 +68,31 @@ const fetchSesiPelajaran = async () => {
 
   try {
     const res = await getSesiPengampu(pengampuId.value, classId.value, currentPage.value);
-
     const list = res ?? [];
 
     console.log("RAW SESSION:", list);
 
-    // ❌ HAPUS FILTER INI TOTAL
+    // 🔥 LOGIKA BARU: Membedakan 'closed' pertama (Terjadwal) dan 'closed' kedua (Selesai) berdasarkan isi Topik/Materi
     sesiList.value = list.map(s => {
       let labelStatus = "Terjadwal";
 
-      if (s.status === "opened") labelStatus = "Berjalan";
-      else if (s.status === "closed") labelStatus = "Selesai";
+      if (s.status === "opened") {
+        labelStatus = "Berjalan";
+      } else if (s.status === "closed") {
+        // Jika status closed tapi sudah ada topik/materi, artinya ini closed yang kedua (Selesai)
+        if (s.topic && s.topic !== "" && s.topic !== "-") {
+          labelStatus = "Selesai";
+        } else {
+          labelStatus = "Terjadwal";
+        }
+      }
 
       return {
         id: s.id,
         tanggal: s.session_date || "-",
         number: s.session_number,
         materi: s.topic || "-",
-        uiStatus: labelStatus,
+        uiStatus: labelStatus, 
         status: s.status
       };
     });
@@ -93,8 +100,6 @@ const fetchSesiPelajaran = async () => {
     // info kelas dari item pertama
     if (list.length > 0) {
       const first = list[0];
-      
-      // 🔥 Ekstrak hari riil dari properti session_date item pertama backend
       const hariHasilKonversi = konversiKeHari(first.session_date);
 
       infoKelas.value = {
@@ -103,7 +108,7 @@ const fetchSesiPelajaran = async () => {
         kelas: first.class_name,
         dosen: first.lecturer?.employee_name,
         peserta: first.total_mahasiswa || 0,
-        hari: hariHasilKonversi, // 🔥 Sekarang terisi otomatis sesuai session_date backend
+        hari: hariHasilKonversi, 
         waktu: `${first.start_time} - ${first.end_time}`,
         ruangan: "-",
         semester: "-",
@@ -179,11 +184,12 @@ watch(search, async () => {
   await fetchSesiPelajaran();
 });
 
-// Modal Actions & Redirection
+// Penentuan aksi klik tombol berdasarkan label status UI hasil filter
 const handleSesiClick = (sesi) => {
   if (!sesi) return;
 
   if (sesi.uiStatus === 'Berjalan' || sesi.uiStatus === 'Selesai') {
+    // Jika Berjalan / Selesai -> Langsung arahkan masuk ke halaman detail sesi (Lihat Sesi)
     router.push({
       path: "/detail-sesi",
       query: {
@@ -195,6 +201,7 @@ const handleSesiClick = (sesi) => {
       }
     });
   } else {
+    // Jika Terjadwal -> Tampilkan Pop-Up pengisian Topik (Buka Sesi)
     selectedJadwal.value = {
       id: sesi.id,
       mataKuliah: infoKelas.value.mataKuliah,
@@ -205,7 +212,7 @@ const handleSesiClick = (sesi) => {
   }
 };
 
-// Eksekusi Update Jadwal
+// Eksekusi Buka Sesi dari dalam Modal Pop-up
 const bukaSesi = async () => {
   if (!topikKelas.value.trim()) {
     alert("Mohon masukkan topik kelas terlebih dahulu!");
@@ -215,7 +222,7 @@ const bukaSesi = async () => {
   try {
     const payload = { 
       topic: topikKelas.value,
-      status: "opened"
+      status: "opened" // Mengubah status menjadi opened ke back-end
     };
 
     const res = await updateJadwal(selectedJadwal.value.id, payload);
@@ -224,6 +231,7 @@ const bukaSesi = async () => {
       showModal.value = false;
       topikKelas.value = "";
 
+      // Redirect langsung ke detail-sesi setelah berhasil menyimpan
       router.push({
         path: "/detail-sesi",
         query: {
@@ -304,20 +312,20 @@ const lihatNilai = () => {
       </div>
 
       <div class="flex gap-2">
-  <button
-    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
-    @click="lihatNilai"
-  >
-    Lihat Nilai
-  </button>
+        <button
+          class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+          @click="lihatNilai"
+        >
+          Lihat Nilai
+        </button>
 
-  <button
-    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
-    @click="openAturanNilai"
-  >
-    Aturan Nilai
-  </button>
-</div>
+        <button
+          class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+          @click="openAturanNilai"
+        >
+          Aturan Nilai
+        </button>
+      </div>
     </div>    
   </div>
 
@@ -395,7 +403,7 @@ const lihatNilai = () => {
               <td class="p-2 text-center">
                 <button @click="handleSesiClick(s)"
                         class="border border-blue-900 text-blue-900 px-4 py-1 rounded hover:bg-blue-900 hover:text-white transition">
-                  {{ s.uiStatus === 'Terjadwal' ? 'Buka Sesi' : (s.uiStatus === 'Selesai' ? 'Lihat Sesi' : 'Masuk Sesi') }}
+                  {{ s.uiStatus === 'Terjadwal' ? 'Buka Sesi' : 'Lihat Sesi' }}
                 </button>
               </td>
             </tr>
