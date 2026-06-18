@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
-const { getSesiPengampu, getMahasiswaKelas, updateJadwal, getKelas } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, updateJadwal, get } = kelasService();
 
 const route = useRoute();
 const router = useRouter();
@@ -14,12 +14,13 @@ const search = ref("");
 const currentPage = ref(1);
 const searchPeserta = ref("");
 
-// State Pagination Lokal
-const meta = ref({ links: [] });
-
 const classId = ref(route.query.class_id || route.query.classId || route.query.id || "");
 const mataKuliahKode = computed(() => route.query.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
+
+console.log("ROUTE QUERY:", route.query);
+console.log("CLASS ID:", classId.value);
+console.log("PENGAMPU ID:", pengampuId.value);
 
 const activeTab = ref("informasi");
 
@@ -37,7 +38,6 @@ const infoKelas = ref({
   prodi: "-", 
   tahunAkademik: "-"
 });
-
 const sesiList = ref([]);
 const pesertaKelas = ref([]);
 const totalMahasiswa = ref(0);
@@ -50,7 +50,7 @@ const selectedJadwal = ref({
   number: "",
 });
 
-// FUNGSI HELPER: Mengubah format tanggal 'YYYY-MM-DD' dari backend menjadi nama Hari Indonesia
+// 🔥 FUNGSI HELPER: Mengubah session_date YYYY-MM-DD menjadi nama hari Indonesia
 const konversiKeHari = (dateString) => {
   if (!dateString || dateString === "-") return "-";
   try {
@@ -63,37 +63,20 @@ const konversiKeHari = (dateString) => {
   }
 };
 
-// Fungsi Tambahan untuk Melengkapi Data Kelas yang tidak ada di Sesi Pengampu
-const fetchInformasiKelasLama = async () => {
-  if (!classId.value) return;
-  try {
-    const dataKelas = await getKelas(classId.value);
-    if (dataKelas) {
-      infoKelas.value.semester = dataKelas.semester || "-";
-      infoKelas.value.prodi = dataKelas.prodi || "Teknik Informatika";
-      infoKelas.value.tahunAkademik = dataKelas.tahun_akademik || "2025/2026";
-    }
-  } catch (err) {
-    console.error("Gagal melengkapi data dari getKelas:", err);
-  }
-};
-
-// Fungsi Utama Load Sesi & Ambil Hari Mengajar Aktual
 const fetchSesiPelajaran = async () => {
   if (!pengampuId.value) return;
 
   try {
     const res = await getSesiPengampu(pengampuId.value, classId.value, currentPage.value);
-    console.log("RESPONSE UTUH API SESI:", res);
 
-    const list = res?.data || res || [];
-    if (res?.meta) {
-      meta.value = res.meta;
-    }
+    const list = res ?? [];
 
-    // Mapping untuk data baris tabel
+    console.log("RAW SESSION:", list);
+
+    // ❌ HAPUS FILTER INI TOTAL
     sesiList.value = list.map(s => {
       let labelStatus = "Terjadwal";
+
       if (s.status === "opened") labelStatus = "Berjalan";
       else if (s.status === "closed") labelStatus = "Selesai";
 
@@ -107,26 +90,31 @@ const fetchSesiPelajaran = async () => {
       };
     });
 
+    // info kelas dari item pertama
     if (list.length > 0) {
       const first = list[0];
-
-      // Ambil string 'session_date' dan terjemahkan menjadi nama hari
+      
+      // 🔥 Ekstrak hari riil dari properti session_date item pertama backend
       const hariHasilKonversi = konversiKeHari(first.session_date);
 
-      infoKelas.value.mataKuliah = first.course_name || "-";
-      infoKelas.value.kode = first.course_code || "-";
-      infoKelas.value.kelas = first.class_name || "-";
-      infoKelas.value.dosen = first.lecturer?.employee_name || "-";
-      infoKelas.value.peserta = first.total_mahasiswa || 0;
-      infoKelas.value.hari = hariHasilKonversi; // Menggunakan hari aktual dari session_date backend
-      infoKelas.value.waktu = first.start_time && first.end_time ? `${first.start_time} - ${first.end_time}` : "-";
-      infoKelas.value.sks = first.sks || "-";
-      
-      await fetchInformasiKelasLama();
+      infoKelas.value = {
+        mataKuliah: first.course_name,
+        kode: first.course_code,
+        kelas: first.class_name,
+        dosen: first.lecturer?.employee_name,
+        peserta: first.total_mahasiswa || 0,
+        hari: hariHasilKonversi, // 🔥 Sekarang terisi otomatis sesuai session_date backend
+        waktu: `${first.start_time} - ${first.end_time}`,
+        ruangan: "-",
+        semester: "-",
+        sks: first.sks || "-",
+        prodi: "-",
+        tahunAkademik: "-"
+      };
     }
 
   } catch (err) {
-    console.error("Gagal memuat sesi pelajaran:", err);
+    console.error(err);
     sesiList.value = [];
   }
 };
@@ -147,13 +135,13 @@ const fetchPesertaKelas = async () => {
         }
         return [];
       });
-      totalMahasiswa.value = pesertaKelas.value.length;
     }
   } catch (error) {
     console.error("Gagal ambil peserta kelas:", error);
   }
 };
 
+// Filter Peserta Berdasarkan Input Search
 const filteredPeserta = computed(() => {
   if (!searchPeserta.value) return pesertaKelas.value;
   return pesertaKelas.value.filter(p =>
@@ -161,6 +149,7 @@ const filteredPeserta = computed(() => {
   );
 });
 
+// Hooks & Watchers
 onMounted(() => {
   fetchSesiPelajaran();
   if (classId.value) {
@@ -181,8 +170,7 @@ watch(
 );
 
 const goPage = async (page) => {
-  if (!page) return;
-  currentPage.value = Number(page);
+  currentPage.value = page;
   await fetchSesiPelajaran();
 };
 
@@ -191,6 +179,7 @@ watch(search, async () => {
   await fetchSesiPelajaran();
 });
 
+// Modal Actions & Redirection
 const handleSesiClick = (sesi) => {
   if (!sesi) return;
 
@@ -216,6 +205,7 @@ const handleSesiClick = (sesi) => {
   }
 };
 
+// Eksekusi Update Jadwal
 const bukaSesi = async () => {
   if (!topikKelas.value.trim()) {
     alert("Mohon masukkan topik kelas terlebih dahulu!");
@@ -248,8 +238,9 @@ const bukaSesi = async () => {
       alert("Gagal mengaktifkan sesi perkuliahan.");
     }
   } catch (error) {
-    console.error("Gagal membuka sesi:", error);
-    alert("Terjadi kesalahan sistem saat mencoba mengaktifkan sesi.");
+    console.error("❌ Gagal buka sesi:", error);
+    const pesanServer = error.response?.data?.errors?.status?.[0] || error.message;
+    alert(`Gagal membuka sesi. Pesan: ${pesanServer}`);
   }
 };
 
@@ -313,20 +304,20 @@ const lihatNilai = () => {
       </div>
 
       <div class="flex gap-2">
-        <button
-          class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
-          @click="lihatNilai"
-        >
-          Lihat Nilai
-        </button>
+  <button
+    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+    @click="lihatNilai"
+  >
+    Lihat Nilai
+  </button>
 
-        <button
-          class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
-          @click="openAturanNilai"
-        >
-          Aturan Nilai
-        </button>
-      </div>
+  <button
+    class="bg-blue-900 text-white px-4 py-1.5 rounded text-[12px] font-normal hover:bg-blue-800 transition"
+    @click="openAturanNilai"
+  >
+    Aturan Nilai
+  </button>
+</div>
     </div>    
   </div>
 
