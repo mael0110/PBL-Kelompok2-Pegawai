@@ -55,7 +55,7 @@ export function kelasService() {
   }
 
   // FUNGSI BARU: Untuk Mengambil Kelas Berdasarkan Nama Prodi
-  async function getKelasByProdi(prodiName = "teknik-informatika") {
+  async function getKelasByProdi(prodiName = "") {
     const token = localStorage.getItem("token");
     try {
       const res = await axios.get(
