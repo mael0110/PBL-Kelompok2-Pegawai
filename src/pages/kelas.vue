@@ -52,7 +52,7 @@ const detailKelas = (kelas) => {
 
   // Sesuai dengan response API: menggunakan kelasIdOtomatis hulu, 
   // di detail ini kita bawa id dari mata kuliah atau disesuaikan dengan parameter detail-kelas Anda
-  const classId = kelas.id || kelas.mata_kuliah?.id;
+  const classId = kelas.class_id || kelas.mata_kuliah?.id;
   const pengampuId = kelas.pengampu_id;
 
   router.push({

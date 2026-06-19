@@ -116,7 +116,7 @@ export function kelasService() {
           if (!namaProdiDinamis) return;
 
           try {
-            console.log(`📡 Menembak API Kelas Prodi untuk: ${namaProdiDinamis}`);
+            // console.log(`📡 Menembak API Kelas Prodi untuk: ${namaProdiDinamis}`);
             const resKelasProdi = await axios.get(
               `https://be.karlearn.site/api/kelas/prodi/${namaProdiDinamis}`,
               { headers }
@@ -163,24 +163,25 @@ export function kelasService() {
     }
   }
 
-  async function getMahasiswaKelas(classId) {
-    const token = localStorage.getItem("token");
-    try {
-      const res = await axios.get(
-        `https://be.karlearn.site/api/kelas/${kelasId}/mahasiswa`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-      return res.data.data || [];
-    } catch (error) {
-      console.error("Gagal ambil mahasiswa:", error.response?.data || error);
-      return [];
-    }
+async function getMahasiswaKelas(classId) {
+  const token = localStorage.getItem("token");
+  try {
+    const res = await axios.get(
+      `https://be.karlearn.site/api/kelas/${classId}/mahasiswa`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+    // Kembalikan res.data utuh agar kita bisa deteksi isinya di Vue
+    return res.data;
+  } catch (error) {
+    console.error("Gagal ambil mahasiswa:", error.response?.data || error);
+    return null;
   }
+}
 
   async function postPresensiMahasiswa(payload) {
     const token = localStorage.getItem("token");
