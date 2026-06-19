@@ -119,37 +119,10 @@ export const nilaiService = () => {
     }
   };
 
-  const getMahasiswaByKelas = async () => {
-    try {
-      const token = localStorage.getItem("token");
-
-      const res = await axios.get(
-        "https://api-mahasiswa-4a.akufarish.my.id:8874/api/mahasiswa",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      console.log("DATA MAHASISWA:", res.data);
-
-      return res.data.data || [];
-    } catch (error) {
-      console.error(
-        "Gagal ambil mahasiswa:",
-        error.response?.data || error
-      );
-
-      return [];
-    }
-  };
   return {
     getAturanNilai,
     createAturanNilai,
     updateAturanNilai,
     downloadTemplateNilai,
-    getMahasiswaByKelas
   };
 };

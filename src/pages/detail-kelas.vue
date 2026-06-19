@@ -335,7 +335,7 @@ const lihatNilai = () => {
     query: {
       class_id: classId.value,
       kode: mataKuliahKode.value,
-      namaKelas: route.query.namaKelas,
+      pengampuId: pengampuId.value
     },
   });
 };

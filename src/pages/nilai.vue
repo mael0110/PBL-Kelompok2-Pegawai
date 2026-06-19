@@ -4,17 +4,17 @@ import { ref, computed, onMounted } from "vue";
 import { Upload, Download } from "lucide-vue-next";
 import { nilaiService } from "../services/nilai";
 import { useRoute, useRouter, RouterLink } from "vue-router";
+import { kelasService } from "../services/kelas";
 
 const route = useRoute();
 const router = useRouter();
 
-// Menggunakan service getMahasiswaByKelas dari nilaiService sesuai API baru
-const { downloadTemplateNilai, getMahasiswaByKelas } = nilaiService(); 
+const { downloadTemplateNilai } = nilaiService(); 
+const { getKelasByProdi, getMahasiswaKelas } = kelasService();
 
-// --- PARAMETER RUTE DINAMIS ---
-const classId = computed(() => route.query.class_id || route.query.classId || route.query.id || "");
-const mataKuliahKode = computed(() => route.query.kode || route.query.course_code || "");
+const mataKuliahKode = computed(() => route.query.kode || route.params.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
+const classId = computed(() => route.query.class_id || route.query.classId || "");
 
 const namaMataKuliah = ref("Mata Kuliah");
 const namaKelas = ref("Kelas");
@@ -23,32 +23,69 @@ const file = ref(null);
 const loading = ref(false);
 const nilaiData = ref([]); 
 
-/* =========================
-   1. SINKRONISASI DATA MAHASISWA (FIX SESUAI RESPON API BARU)
-========================= */
+const fetchInfoKelasMaster = async () => {
+  try {
+    const prodiParam = "teknik-informatika";
+    const responseProdi = await getKelasByProdi(prodiParam);
+    let semuaKelasProdi = [];
+
+    if (Array.isArray(responseProdi)) {
+      semuaKelasProdi = responseProdi;
+    } else if (responseProdi?.data) {
+      semuaKelasProdi = responseProdi.data;
+    }
+
+    if (semuaKelasProdi && classId.value) {
+      const kelasCocok = semuaKelasProdi.find(k => 
+        String(k.id).trim().toLowerCase() === String(classId.value).trim().toLowerCase()
+      );
+      
+      if (kelasCocok) {
+        namaKelas.value = kelasCocok.name || "-";
+        
+        const daftarMatkul = kelasCocok.kurikulum?.kurikulum_mk;
+        if (Array.isArray(daftarMatkul) && mataKuliahKode.value) {
+          const matkulCocok = daftarMatkul.find(m => 
+            String(m.mata_kuliah?.kode).trim().toLowerCase() === String(mataKuliahKode.value).trim().toLowerCase()
+          );
+          
+          if (matkulCocok) {
+            namaMataKuliah.value = matkulCocok.mata_kuliah?.name || "";
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Gagal memuat info kelas dari master prodi:", err);
+  }
+};
+
 const fetchMahasiswaDariKelas = async () => {
+  if (!classId.value) return;
   loading.value = true;
   try {
-    const res = await getMahasiswaByKelas();
-    console.log("🟢 RESPONSE ASLI DARI API MAHASISWA:", res);
+    const res = await getMahasiswaKelas(classId.value);
+    console.log("RESPONSE ASLI DARI API MAHASISWA KELAS:", res);
 
-    // Mengantisipasi jika service langsung mengembalikan array data atau berupa object wrapper
     const dataMentah = Array.isArray(res) ? res : (res?.data || []);
     
     if (dataMentah && dataMentah.length > 0) {
-      // Mapping field disesuaikan 100% dengan properti JSON baru Anda
       nilaiData.value = dataMentah.map(m => {
-        console.log(`🔍 Mapping Mahasiswa -> Nama: ${m.nama_mahasiswa}, NIM: ${m.nim}, ID: ${m.id_mahasiswa}`);
+        let studentObj = {};
+        
+        if (m.mahasiswa && Array.isArray(m.mahasiswa) && m.mahasiswa.length > 0) {
+          studentObj = m.mahasiswa[0]; // Mengambil objek di dalam Array(1)
+        } else if (m.mahasiswa) {
+          studentObj = m.mahasiswa;
+        } else {
+          studentObj = m;
+        }
 
         return {
-          id: String(m.id_mahasiswa || ''),
-          nim: String(m.nim || ''), 
-          nama: String(m.nama_mahasiswa || ''),
-          
-          // Karena data nilai terpisah dari API daftar mahasiswa ini, 
-          // kita set default ke 0 / '-' agar siap di-update saat upload nilai.
+          id: String(studentObj.mahasiswa_id || studentObj.id || m.id || ''),
+          nim: String(studentObj.nim || ''), 
+          nama: String(studentObj.name || studentObj.nama || ''),
           tugas: 0,
-          quiz: 0,
           uts: 0,
           uas: 0,
           nilaiAkhir: 0,
@@ -61,16 +98,13 @@ const fetchMahasiswaDariKelas = async () => {
       nilaiData.value = [];
     }
   } catch (err) {
-    console.error("❌ Gagal mengambil data mahasiswa:", err);
+    console.error("❌ Gagal mengambil data mahasiswa kelas:", err);
     nilaiData.value = [];
   } finally {
     loading.value = false;
   }
 };
 
-/* =========================
-   2. FILE MANAGEMENT
-========================= */
 const handleFileChange = (e) => {
   if (e.target.files && e.target.files[0]) {
     file.value = e.target.files[0];
@@ -81,20 +115,16 @@ const uploadNilai = async () => {
   if (!file.value) return;
   loading.value = true;
   try {
-    // Tambahkan logika pengiriman file ke backend Anda di sini jika ada service upload
     alert(`File ${file.value.name} berhasil dipilih. Mengompres data...`);
     file.value = null;
     await fetchMahasiswaDariKelas();
   } catch (err) {
-    console.error("❌ Gagal upload nilai:", err);
+    console.error("Gagal upload nilai:", err);
   } finally {
     loading.value = false;
   }
 };
 
-/* =========================
-   3. DOWNLOAD TEMPLATE
-========================= */
 const handleDownloadTemplate = async () => {
   if (nilaiData.value.length === 0) {
     alert("Daftar mahasiswa kosong. Tidak bisa mendownload template.");
@@ -105,11 +135,10 @@ const handleDownloadTemplate = async () => {
   try {
     let rawCode = mataKuliahKode.value || route.query.kode || "MK-001";
     if (rawCode.length > 10) {
-      console.warn(`⚠️ Kode matkul "${rawCode}" dipotong karena melebihi batas maksimal 10 karakter.`);
+      console.warn(`Kode matkul "${rawCode}" dipotong karena melebihi batas maksimal 10 karakter.`);
       rawCode = rawCode.substring(0, 10);
     }
 
-    // Payload bersih yang memetakan id, nim, dan nama ke format backend ekspor
     const payload = {
       course_code: rawCode,
       course_name: route.query.namaMatkul || namaMataKuliah.value || "Mata Kuliah",
@@ -122,11 +151,11 @@ const handleDownloadTemplate = async () => {
       }))
     };
 
-    console.log("🚀 PAYLOAD DIKIRIM KE EXPORT API:", payload);
+    console.log("PAYLOAD DIKIRIM KE EXPORT API:", payload);
     await downloadTemplateNilai(payload);
     
   } catch (error) {
-    console.error("❌ Gagal mendownload template:", error);
+    console.error("Gagal mendownload template:", error);
   } finally {
     loading.value = false;
   }
@@ -135,29 +164,45 @@ const handleDownloadTemplate = async () => {
 const kembaliKeDetailKelas = () => {
   router.push({
     path: "/detail-kelas",
-    query: { id: classId.value, pengampuId: pengampuId.value, kode: mataKuliahKode.value }
+    query: { id: classId.value, classId: classId.value, pengampuId: pengampuId.value, kode: mataKuliahKode.value }
   });
 };
 
-onMounted(() => {
-  fetchMahasiswaDariKelas();
+onMounted(async () => {
+  await fetchMahasiswaDariKelas();
+  await fetchInfoKelasMaster();
 });
 </script>
 
 <template>
-  <adminLayout>
-    <div class="p-6 min-h-screen">
-      
+  <adminLayout>      
       <div class="flex justify-between items-start mb-6">
           <div>
-              <p class="text-[12px] mb-2 text-gray-500">
+              <p class="text-[12px] text-gray-500">
                   <RouterLink to="/Kelas" class="hover:underline">Kelas</RouterLink> 
                   <span class="mx-2 text-gray-400">&gt;</span>
                   <span @click="kembaliKeDetailKelas" class="cursor-pointer hover:underline">Detail Kelas</span> 
                   <span class="mx-2 text-gray-400">&gt;</span> 
                   <span class="text-gray-400">Nilai Mahasiswa</span>
               </p>
-              <h1 class="text-[20px] font-bold text-slate-800 uppercase mb-3">NILAI MAHASISWA</h1>
+              
+              <div>
+                <h1 class="text-[20px] font-bold mb-6 mt-6">NILAI</h1>
+                <div class="space-y-3 text-[14px]">
+                    <div class="flex">
+                        <span class="w-[140px] text-[14px] font-medium">Mata Kuliah</span>
+                        <span class="text-[14px] font-medium">
+                            : {{ namaMataKuliah }}
+                        </span>
+                    </div>
+                    <div class="flex">
+                        <span class="w-[140px] text-[14px] font-medium">Kelas</span>
+                        <span class="font-medium text-[14px]">
+                            : {{ namaKelas }}
+                        </span>
+                    </div>
+                </div>
+            </div>
           </div>
           <button @click="kembaliKeDetailKelas" class="bg-gray-200 text-slate-700 px-4 py-2 rounded text-[12px] font-semibold mt-4 hover:bg-gray-300">
               Kembali
@@ -170,7 +215,7 @@ onMounted(() => {
           <input type="file" class="hidden" @change="handleFileChange" />
           <Upload class="w-10 h-10 text-blue-700 mb-2" />
           <p class="text-[13px] font-medium text-slate-700">
-            {{ file ? `File: ${file.name}` : 'Tarik & Jatuhkan File atau Klik untuk Upload' }}
+            {{ file ? `File: ${file.name}` : 'Tarik dan Jatuhkan File Nilai di Sini atau Klik untuk Menjelah (Format File yang didukung:xlsx, csv)' }}
           </p>
         </label>
         <div class="flex gap-3 mt-4">
@@ -190,7 +235,6 @@ onMounted(() => {
               <th class="p-3 text-left w-32">NIM</th>
               <th class="p-3 text-left">Nama</th>
               <th class="p-3 text-center">Tugas</th>
-              <th class="p-3 text-center">Quiz</th>
               <th class="p-3 text-center">UTS</th>
               <th class="p-3 text-center">UAS</th>
               <th class="p-3 text-center">Nilai Akhir</th>
@@ -207,7 +251,6 @@ onMounted(() => {
               <td class="p-3 text-left font-medium">{{ item.nim }}</td>
               <td class="p-3 text-left">{{ item.nama }}</td>
               <td class="p-3 text-center">{{ item.tugas }}</td>
-              <td class="p-3 text-center">{{ item.quiz }}</td>
               <td class="p-3 text-center">{{ item.uts }}</td>
               <td class="p-3 text-center">{{ item.uas }}</td>
               <td class="p-3 text-center font-semibold text-blue-900">{{ item.nilaiAkhir }}</td>
@@ -216,7 +259,5 @@ onMounted(() => {
           </tbody>
         </table>
       </div>
-
-    </div>
   </adminLayout>
 </template>
