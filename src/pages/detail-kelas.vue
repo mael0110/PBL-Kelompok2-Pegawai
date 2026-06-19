@@ -186,29 +186,27 @@ const fetchPesertaKelas = async () => {
 
   try {
     const resUtuh = await getMahasiswaKelas(classId.value);
-    console.log("🔥 ISI RESPON UTUH DARI BACKEND:", resUtuh);
+    console.log("🔥 ISI RESPON UTUH SUDAH TERJAHIT NIM:", resUtuh);
     
-    // Ambil array 'data' dari response utuh
     const arrayData = resUtuh?.data || [];
     
     if (Array.isArray(arrayData) && arrayData.length > 0) {
-      // Jalankan flatMap sesuai struktur: resUtuh.data[0].mahasiswa
       pesertaKelas.value = arrayData.flatMap(item => {
         if (item.mahasiswa && Array.isArray(item.mahasiswa)) {
           return item.mahasiswa.map(m => ({
             id: m.mahasiswa_id || Math.random().toString(),
             nama: m.name || "Nama Kosong",
-            email: m.email || "-"
+            email: m.email || "-",
+            nim: m.nim || "-" // Langsung panggil field 'nim' yang dikirim dari service!
           }));
         }
         return [];
       });
     } else {
-      // Jika resUtuh.data tidak ada atau kosong
       pesertaKelas.value = [];
     }
 
-    console.log("🚀 HASIL EXTRACT KE STATE PESERTA:", pesertaKelas.value);
+    console.log("🚀 STATE PESERTA SIAP DI-RENDER:", pesertaKelas.value);
   } catch (error) {
     console.error("Gagal ambil peserta kelas:", error);
   }
@@ -520,7 +518,7 @@ const lihatNilai = () => {
               </div>
               <div>
                 <h3 class="text-[12px] font-normal">{{ p.nama }}</h3>
-                <p class="text-[11px] text-gray-500">{{ p.email }}</p>
+                <p class="text-[11px] text-gray-500">{{ p.nim }}</p>
               </div>
             </div>
             <div v-if="filteredPeserta.length === 0" class="text-center text-gray-400 text-[12px] py-4">

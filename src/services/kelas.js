@@ -165,8 +165,10 @@ export function kelasService() {
 
 async function getMahasiswaKelas(classId) {
   const token = localStorage.getItem("token");
+  
   try {
-    const res = await axios.get(
+    // 1. Tembak API Kelompok 1 untuk mengambil daftar pivot mahasiswa di kelas tersebut
+    const resKelompok1 = await axios.get(
       `https://be.karlearn.site/api/kelas/${classId}/mahasiswa`,
       {
         headers: {
@@ -175,10 +177,65 @@ async function getMahasiswaKelas(classId) {
         },
       }
     );
-    // Kembalikan res.data utuh agar kita bisa deteksi isinya di Vue
-    return res.data;
+
+    const dataUtuhKlp1 = resKelompok1.data;
+    const arrayDataKlp1 = dataUtuhKlp1?.data || [];
+
+    // Jika dari Kelompok 1 tidak ada data sama sekali, langsung stop di sini
+    if (!Array.isArray(arrayDataKlp1) || arrayDataKlp1.length === 0) {
+      return dataUtuhKlp1; 
+    }
+
+    // 2. Tembak API Kelompok 3 untuk mengambil daftar seluruh master mahasiswa & NIM
+    let listMasterKlp3 = [];
+    try {
+      const resKelompok3 = await axios.get(
+        `https://api-mahasiswa-4a.akufarish.my.id:8874/api/mahasiswa`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+      // Sesuai dokumentasi foto: res.data.data berupa array[MahasiswaResource]
+      listMasterKlp3 = resKelompok3.data?.data || [];
+    } catch (err3) {
+      console.error("❌ Gagal intersep master NIM dari Kelompok 3:", err3);
+    }
+
+    // 3. Lakukan proses 'Mating/Jahit' NIM berdasarkan cocoknya mahasiswa_id == id_mahasiswa
+    const dataTerjahit = arrayDataKlp1.map((item) => {
+      if (item.mahasiswa && Array.isArray(item.mahasiswa)) {
+        const mahasiswaDengannim = item.mahasiswa.map((mhs) => {
+          // Cari mahasiswa yang cocok di data Kelompok 3
+          const matchKlp3 = listMasterKlp3.find(
+            (m3) => String(m3.id_mahasiswa).trim() === String(mhs.mahasiswa_id).trim()
+          );
+
+          // Kembalikan data mahasiswa Kelompok 1 + bonus field 'nim' hasil jahitan
+          return {
+            ...mhs,
+            nim: matchKlp3?.nim || "-" // Kalau tidak ketemu di master, kita kasih fallback "-"
+          };
+        });
+
+        return {
+          ...item,
+          mahasiswa: mahasiswaDengannim
+        };
+      }
+      return item;
+    });
+
+    // 4. Bungkus kembali ke struktur response asli agar detail-kelas.vue tidak error/pecah
+    return {
+      ...dataUtuhKlp1,
+      data: dataTerjahit
+    };
+
   } catch (error) {
-    console.error("Gagal ambil mahasiswa:", error.response?.data || error);
+    console.error("Gagal ambil & jahit mahasiswa:", error.response?.data || error);
     return null;
   }
 }
