@@ -5,7 +5,7 @@ import { useRoute, useRouter } from "vue-router";
 import { User, Clock, Users, UserRound, CalendarClock } from "lucide-vue-next";
 import { kelasService } from "../services/kelas.js";
 
-const { getSesiPengampu, getMahasiswaKelas, meta, updateJadwal, get } = kelasService();
+const { getSesiPengampu, getMahasiswaKelas, meta, updateJadwal, getKelasByProdi } = kelasService();
 
 const route = useRoute();
 const router = useRouter();
@@ -50,6 +50,15 @@ const selectedJadwal = ref({
   number: "",
 });
 
+// FUNGSI HELPER: Mengubah angka semester menjadi format terbilang
+const formatSemesterTerbilang = (num) => {
+  if (!num) return "-";
+  const terbilang = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan"];
+  const parseNum = parseInt(num, 10);
+  if (isNaN(parseNum) || parseNum < 1 || parseNum > 8) return num;
+  return `${parseNum} (${terbilang[parseNum]})`;
+};
+
 // FUNGSI HELPER: Mengubah session_date YYYY-MM-DD menjadi nama hari Indonesia
 const konversiKeHari = (dateString) => {
   if (!dateString || dateString === "-") return "-";
@@ -72,14 +81,12 @@ const fetchSesiPelajaran = async () => {
 
     console.log("RAW SESSION:", list);
 
-    // 🔥 LOGIKA BARU: Membedakan 'closed' pertama (Terjadwal) dan 'closed' kedua (Selesai) berdasarkan isi Topik/Materi
     sesiList.value = list.map(s => {
       let labelStatus = "Terjadwal";
 
       if (s.status === "opened") {
         labelStatus = "Berjalan";
       } else if (s.status === "closed") {
-        // Jika status closed tapi sudah ada topik/materi, artinya ini closed yang kedua (Selesai)
         if (s.topic && s.topic !== "" && s.topic !== "-") {
           labelStatus = "Selesai";
         } else {
@@ -102,6 +109,50 @@ const fetchSesiPelajaran = async () => {
       const first = list[0];
       const hariHasilKonversi = konversiKeHari(first.session_date);
 
+      // MENGISI DATA YANG KOSONG: Cocokkan getKelasByProdi dengan first.class_name
+      let dataProdiCocok = null;
+      try {
+        const responseProdi = await getKelasByProdi();
+        let semuaKelasProdi = [];
+        if (Array.isArray(responseProdi)) {
+          semuaKelasProdi = responseProdi;
+        } else if (responseProdi?.data?.items) {
+          semuaKelasProdi = responseProdi.data.items;
+        } else if (responseProdi?.items) {
+          semuaKelasProdi = responseProdi.items;
+        }
+
+        if (semuaKelasProdi && first.class_name) {
+          dataProdiCocok = semuaKelasProdi.find(k => 
+            String(k.name).trim().toLowerCase() === String(first.class_name).trim().toLowerCase()
+          );
+        }
+      } catch (prodiErr) {
+        console.error("Gagal get prodi master:", prodiErr);
+      }
+
+      // 🔥 LOGIKA BARU UNTUK MENCARI SKS DI DALAM ARRAY kurikulum_mk
+      let sksHasilPencarian = "-";
+      if (dataProdiCocok?.kurikulum?.kurikulum_mk && Array.isArray(dataProdiCocok.kurikulum.kurikulum_mk)) {
+        // Cari matakuliah berdasarkan kode yang sama dengan first.course_code
+        const mkCocok = dataProdiCocok.kurikulum.kurikulum_mk.find(item => 
+          String(item?.mata_kuliah?.kode).trim().toLowerCase() === String(first.course_code).trim().toLowerCase()
+        );
+        if (mkCocok?.mata_kuliah) {
+          sksHasilPencarian = mkCocok.mata_kuliah.sks;
+        }
+      }
+
+      // Olah data Tahun Akademik
+      let tahunFormat = "-";
+      if (dataProdiCocok?.tahun_akademik) {
+        const awal = dataProdiCocok.tahun_akademik.tahun_awal || "";
+        const akhir = dataProdiCocok.tahun_akademik.tahun_akhir || "";
+        const tipe = dataProdiCocok.tahun_akademik.tipe_semester || "";
+        const tipeKapital = tipe ? tipe.charAt(0).toUpperCase() + tipe.slice(1) : "";
+        tahunFormat = `${awal}/${akhir} ${tipeKapital}`.trim();
+      }
+
       infoKelas.value = {
         mataKuliah: first.course_name,
         kode: first.course_code,
@@ -110,12 +161,18 @@ const fetchSesiPelajaran = async () => {
         peserta: first.total_mahasiswa || 0,
         hari: hariHasilKonversi, 
         waktu: `${first.start_time} - ${first.end_time}`,
-        ruangan: "-",
-        semester: "-",
-        sks: first.sks || "-",
-        prodi: "-",
-        tahunAkademik: "-"
+        
+        // 🔥 SKS sekarang diambil dari first.sks atau sksHasilPencarian array kurikulum_mk
+        sks: first.sks || sksHasilPencarian,
+        
+        // Mengisi data kosong hasil pencocokan prodi master
+        ruangan: dataProdiCocok?.room?.name || dataProdiCocok?.ruangan || "-",
+        semester: dataProdiCocok ? formatSemesterTerbilang(dataProdiCocok.semester) : "-",
+        prodi: dataProdiCocok?.prodi?.name || "-",
+        tahunAkademik: tahunFormat
       };
+
+      totalMahasiswa.value = first.total_mahasiswa || 0;
     }
 
   } catch (err) {
@@ -359,14 +416,14 @@ const lihatNilai = () => {
         <h2 class="font-semibold text-[15px] mb-3">Informasi Kelas</h2>
         <div class="grid grid-cols-4 gap-y-3">
           <p>Mata Kuliah</p><p>{{ infoKelas.mataKuliah }}</p>
-          <p>Kode Matakuliah</p><p>{{ infoKelas.kode }}</p>
-          <p>Program Studi</p><p>{{ infoKelas.prodi }}</p>
-          <p>Semester</p><p>{{ infoKelas.semester }}</p>
-          <p>SKS</p><p>{{ infoKelas.sks }}</p>
           <p>Kelas</p><p>{{ infoKelas.kelas }}</p>
+          <p>Kode Matakuliah</p><p>{{ infoKelas.kode }}</p>
           <p>Dosen</p><p>{{ infoKelas.dosen }}</p>
+          <p>Program Studi</p><p>{{ infoKelas.prodi }}</p>
           <p>Hari</p><p>{{ infoKelas.hari }}</p>
-          <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
+          <p>Semester</p><p>{{ infoKelas.semester }}</p>
+           <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
+          <p>SKS</p><p>{{ infoKelas.sks }}</p>
           <p>Tahun Academic</p><p>{{ infoKelas.tahunAkademik }}</p>
         </div>
       </div>
