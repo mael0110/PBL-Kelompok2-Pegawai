@@ -9,19 +9,45 @@ const router = useRouter();
 
 const search = ref("");
 
-const kelasDiampu = ref([]);  // Menampung hasil API getKelas (Pengampu)
-const kelasProdi = ref([]);   // Menampung hasil API prodi (Detail admin kelas)
+const kelasDiampu = ref([]); 
+const kelasProdi = ref([]);   
+const jumlahPesertaMap = ref({}); 
 
-const { getKelas, getKelasByProdi } = kelasService();
+const { getKelas, getKelasByProdi, getMahasiswaKelas } = kelasService();
 
 const fetchKelas = async () => {
-  // Mengambil data secara dinamis dari gabungan dua API di dalam getKelas()
   const dataPengampu = await getKelas();
-  kelasDiampu.value = dataPengampu;
+  kelasDiampu.value = dataPengampu || [];
 
   const prodiParam = "teknik-informatika";
   const dataProdi = await getKelasByProdi(prodiParam);
   kelasProdi.value = dataProdi;
+
+  // Proses hitung murni mahasiswa riil kelompok 1
+  if (Array.isArray(kelasDiampu.value)) {
+    for (const kelas of kelasDiampu.value) {
+      const targetId = kelas.class_id || kelas.id || kelas.mata_kuliah?.id;
+      if (targetId) {
+        try {
+          const resUtuh = await getMahasiswaKelas(targetId);
+          const arrayData = resUtuh?.data || [];
+          
+          let totalMhs = 0;
+          if (Array.isArray(arrayData) && arrayData.length > 0) {
+            const listMahasiswa = arrayData.flatMap(item => item.mahasiswa || []);
+            totalMhs = listMahasiswa.length;
+          }
+
+          // Menyimpan data asli ke map reaktif
+          jumlahPesertaMap.value[targetId] = totalMhs;
+          console.log(`Jumlah asli mhs untuk kelas ${targetId}:`, totalMhs);
+        } catch (err) {
+          console.error(`Gagal memuat jumlah peserta untuk kelas ${targetId}:`, err);
+          jumlahPesertaMap.value[targetId] = 0;
+        }
+      }
+    }
+  }
 };
 
 const filteredKelas = computed(() => {
@@ -31,28 +57,22 @@ const filteredKelas = computed(() => {
   });
 });
 
+// 🔥 BERSIH SEPOHON: Rumus pembagian /3 pemangkas angka sudah dihapus total dari sini!
 const dapatkanDetailKelas = (namaKelas) => {
   const cocok = kelasProdi.value.find(
     (k) => k?.name?.toLowerCase() === namaKelas?.toLowerCase()
   );
 
-  const totalSemuaMhs = cocok?.mahasiswa?.length || 0;
-  
-  const pesertaPerKelas = totalSemuaMhs > 40 ? Math.ceil(totalSemuaMhs / 3) : totalSemuaMhs;
-
   return {
     prodi: cocok?.prodi?.name || "Teknik Informatika",
-    semester: cocok?.semester || "-",
-    peserta: pesertaPerKelas
+    semester: cocok?.semester || "-"
   };
 };
 
 const detailKelas = (kelas) => {
   console.log("CLICK DATA:", kelas);
 
-  // Sesuai dengan response API: menggunakan kelasIdOtomatis hulu, 
-  // di detail ini kita bawa id dari mata kuliah atau disesuaikan dengan parameter detail-kelas Anda
-  const classId = kelas.class_id || kelas.mata_kuliah?.id;
+  const classId = kelas.class_id || kelas.id || kelas.mata_kuliah?.id;
   const pengampuId = kelas.pengampu_id;
 
   router.push({
@@ -156,7 +176,8 @@ const namaField = (field) => {
 
             <div class="flex items-center gap-2 text-gray-600 text-[14px]">
               <Users class="w-5 h-5" />
-              <span> {{ detail.peserta }} Peserta</span>
+              <!-- 🔥 SEKARANG DIAMBIL DARI MAP JUMLAH PESERTA RIIL SECARA TOTAL TANPA DISUNAT -->
+              <span> {{ jumlahPesertaMap[kelas.class_id || kelas.id || kelas.mata_kuliah.id] || 0 }} Peserta</span>
             </div>
           </div>
         </div>

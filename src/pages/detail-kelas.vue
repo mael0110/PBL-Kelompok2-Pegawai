@@ -505,11 +505,11 @@ const lihatNilai = () => {
         </div>
 
         <div class="bg-white p-4 rounded shadow">
-          <h2 class="font-semibold text-[14px] mb-2">Peserta Kelas</h2>
+          <h2 class="font-semibold text-[14px] mb-2">Jumlah {{  }} Peserta</h2>
           <div class="flex gap-4 mb-3">
             <input v-model="searchPeserta" type="text" placeholder="Search"
               class="w-full border rounded-[6px] px-3 py-2 text-[11px] outline-none" />
-            <button class="bg-green-600 text-white px-4 py-2 text-[12px] rounded-[6px] font-semibold">Cari</button>
+            <!-- <button class="bg-green-600 text-white px-4 py-2 text-[12px] rounded-[6px] font-semibold">Cari</button> -->
           </div>
           <div class="space-y-2">
             <div v-for="p in filteredPeserta" :key="p.id" class="flex items-center gap-4">
