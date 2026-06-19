@@ -33,45 +33,113 @@ export function kelasService() {
   }
 }
 
-  // API LAMA (Tetap Dipertahankan & Tidak Dihapus)
-  async function getKelas(kelasId = "") {
+  async function getKelas() {
     const token = localStorage.getItem("token");
+    if (!token) return [];
+
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    };
+
     try {
-      const res = await axios.get(
-        `https://be.karlearn.site/api/pengampu/kelas/${kelasId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
+      const resSemuaKelas = await axios.get("https://be.karlearn.site/api/kelas", { headers });
+      const listKelas = resSemuaKelas.data?.data?.items || []; 
+
+      const tokenParts = token.split('.');
+      if (tokenParts.length !== 3) return [];
+      const payloadBase64 = tokenParts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const decodedPayload = JSON.parse(atob(payloadBase64));
+      const dosenIdDinamis = decodedPayload?.detail_id || decodedPayload?.user_id;
+
+      if (!dosenIdDinamis) return [];
+
+      const resDosen = await axios.get(`https://be.karlearn.site/api/pengampu/dosen/${dosenIdDinamis}`, { headers });
+      const matkulDiampu = resDosen.data?.data || [];
+
+      const hasilAkhirGabungan = [];
+
+      await Promise.all(
+        listKelas.map(async (kelas) => {
+          try {
+            const resPengampuKelas = await axios.get(`https://be.karlearn.site/api/pengampu/kelas/${kelas.id}`, { headers });
+            const daftarPengampuDiKelasIni = resPengampuKelas.data?.data || [];
+
+            daftarPengampuDiKelasIni.forEach((item) => {
+              if (item.dosen?.id === dosenIdDinamis) {
+                hasilAkhirGabungan.push({
+                  ...item,
+                  class_id: kelas.id, 
+                  name: kelas.name    
+                });
+              }
+            });
+          } catch (err) {
+            console.error(`Gagal cek pengampu untuk kelas ${kelas.name}:`, err);
+          }
+        })
       );
-      console.log("Response API Kelas Lama:", res.data);
-      return res.data?.data || [];
+
+      console.log("HASIL GABUNGAN SEMPURNA UNTUK VUE:", hasilAkhirGabungan);
+      return hasilAkhirGabungan;
+
     } catch (error) {
-      console.error("Gagal ambil kelas lama:", error.response?.data || error);
+      console.error("Gagal total proses chaining kelas:", error);
       return [];
     }
   }
 
-  // FUNGSI BARU: Untuk Mengambil Kelas Berdasarkan Nama Prodi
-  async function getKelasByProdi(prodiName = "") {
+  async function getKelasByProdi() {
     const token = localStorage.getItem("token");
+    const headers = {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+    };
+
     try {
-      const res = await axios.get(
-        `https://be.karlearn.site/api/kelas/prodi/${prodiName}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
+      console.log("Mengambil daftar master prodi...");
+      const resProdi = await axios.get("https://be.karlearn.site/api/prodi", { headers });
+      
+      const listProdi = resProdi.data?.data?.items || resProdi.data?.data || resProdi.data || [];
+      
+      if (listProdi.length === 0) {
+        console.warn("Daftar prodi kosong dari API pertama.");
+        return [];
+      }
+
+      const semuaKelasProdiGabungan = [];
+
+      await Promise.all(
+        listProdi.map(async (prodi) => {
+          const namaProdiDinamis = prodi.slug || prodi.name; 
+
+          if (!namaProdiDinamis) return;
+
+          try {
+            console.log(`📡 Menembak API Kelas Prodi untuk: ${namaProdiDinamis}`);
+            const resKelasProdi = await axios.get(
+              `https://be.karlearn.site/api/kelas/prodi/${namaProdiDinamis}`,
+              { headers }
+            );
+
+            const itemsKelas = resKelasProdi.data?.data?.items || resKelasProdi.data?.data || [];
+            
+            if (Array.isArray(itemsKelas)) {
+              semuaKelasProdiGabungan.push(...itemsKelas);
+            } else if (itemsKelas && typeof itemsKelas === 'object') {
+              semuaKelasProdiGabungan.push(itemsKelas);
+            }
+          } catch (err) {
+            console.error(`Gagal mengambil kelas untuk prodi ${namaProdiDinamis}:`, err.response?.data || err.message);
+          }
+        })
       );
-      console.log("Response API Kelas Prodi:", res.data);
-      // Mengambil properti items sesuai struktur JSON baru
-      return res.data?.data?.items || [];
+
+      console.log("HASIL GABUNGAN KELAS BY PRODI DINAMIS:", semuaKelasProdiGabungan);
+      return semuaKelasProdiGabungan;
+
     } catch (error) {
-      console.error("Gagal ambil kelas prodi:", error.response?.data || error);
+      console.error("Gagal total proses chaining getKelasByProdi:", error.response?.data || error);
       return [];
     }
   }

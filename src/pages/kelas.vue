@@ -15,8 +15,8 @@ const kelasProdi = ref([]);   // Menampung hasil API prodi (Detail admin kelas)
 const { getKelas, getKelasByProdi } = kelasService();
 
 const fetchKelas = async () => {
-  const targetId = "019e40b3-8067-71f0-99f0-1a4b1e9fda02"; 
-  const dataPengampu = await getKelas(targetId);
+  // Mengambil data secara dinamis dari gabungan dua API di dalam getKelas()
+  const dataPengampu = await getKelas();
   kelasDiampu.value = dataPengampu;
 
   const prodiParam = "teknik-informatika";
@@ -50,8 +50,10 @@ const dapatkanDetailKelas = (namaKelas) => {
 const detailKelas = (kelas) => {
   console.log("CLICK DATA:", kelas);
 
-  const classId = kelas.class_id || kelas.id || kelas.mata_kuliah?.class_id;
-  const pengampuId = kelas.pengampu_id || kelas.pengampuId;
+  // Sesuai dengan response API: menggunakan kelasIdOtomatis hulu, 
+  // di detail ini kita bawa id dari mata kuliah atau disesuaikan dengan parameter detail-kelas Anda
+  const classId = kelas.id || kelas.mata_kuliah?.id;
+  const pengampuId = kelas.pengampu_id;
 
   router.push({
     path: "/detail-kelas",
