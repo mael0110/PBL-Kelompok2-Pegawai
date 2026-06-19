@@ -2,44 +2,78 @@
 import adminLayout from "./adminLayout.vue";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { ref, computed, onMounted } from "vue";
-// Import dari file nilai.js Anda
 import { nilaiService } from "../services/nilai.js"; 
+import { kelasService } from "../services/kelas";
 
 const route = useRoute();
 const router = useRouter();
 
 const { getAturanNilai, createAturanNilai, updateAturanNilai } = nilaiService();
+const { getKelasByProdi } = kelasService();
 
-// --- PARAMETER RUTE DINAMIS ---
 const mataKuliahKode = computed(() => route.query.kode || route.params.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
 const classId = computed(() => route.query.class_id || route.query.classId || "");
 
-// State ID khusus database untuk keperluan UPDATE data lama (PUT)
 const gradeSettingId = ref(null);
 
-// Data Reaktif untuk Tampilan UI UX (namaMataKuliah sekarang diikat ke input)
-const namaMataKuliah = ref("Administrasi Database"); 
-const namaKelas = ref("4A");
+const namaMataKuliah = ref(""); 
+const namaKelas = ref("-");
 
-// --- STATE MANAGEMENT ---
 const listPenilaian = ref([]);
 const loading = ref(false);
 const isModalOpen = ref(false); 
 
-// Form Input Pop-up (Default awal 0)
+// Form Input Pop-up (Default awal 0, tanpa quiz)
 const inputTugas = ref(0);
-const inputQuiz = ref(0);
 const inputUts = ref(0);
 const inputUas = ref(0);
 
-// Hitung live total input di dalam modal pop-up
+// Hitung live total input di dalam modal pop-up (Tugas + UTS + UAS)
 const liveTotalInput = computed(() => {
-  return Number(inputTugas.value) + Number(inputQuiz.value) + Number(inputUts.value) + Number(inputUas.value);
+  return Number(inputTugas.value) + Number(inputUts.value) + Number(inputUas.value);
 });
 
 // Cek apakah data di tabel utama sudah ada
 const isDataExist = computed(() => listPenilaian.value.length > 0);
+
+// Mengambil info Kelas & Mata Kuliah master menggunakan getKelasByProdi
+const fetchInfoKelasMaster = async () => {
+  try {
+    const prodiParam = "teknik-informatika";
+    const responseProdi = await getKelasByProdi(prodiParam);
+    let semuaKelasProdi = [];
+
+    if (Array.isArray(responseProdi)) {
+      semuaKelasProdi = responseProdi;
+    } else if (responseProdi?.data) {
+      semuaKelasProdi = responseProdi.data;
+    }
+
+    if (semuaKelasProdi && classId.value) {
+      const kelasCocok = semuaKelasProdi.find(k => 
+        String(k.id).trim().toLowerCase() === String(classId.value).trim().toLowerCase()
+      );
+      
+      if (kelasCocok) {
+        namaKelas.value = kelasCocok.name || "-";
+        
+        const daftarMatkul = kelasCocok.kurikulum?.kurikulum_mk;
+        if (Array.isArray(daftarMatkul) && mataKuliahKode.value) {
+          const matkulCocok = daftarMatkul.find(m => 
+            String(m.mata_kuliah?.kode).trim().toLowerCase() === String(mataKuliahKode.value).trim().toLowerCase()
+          );
+          
+          if (matkulCocok) {
+            namaMataKuliah.value = matkulCocok.mata_kuliah?.name || "";
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Gagal memuat info kelas dari master prodi:", err);
+  }
+};
 
 // --- AMBIL DATA ATURAN NILAI ---
 const fetchAturanNilai = async () => {
@@ -56,13 +90,11 @@ const fetchAturanNilai = async () => {
       
       listPenilaian.value = [
         { nama: "Tugas", bobot: Math.round(parseFloat(data.assignment)) || 0 },
-        { nama: "Quiz", bobot: 0 }, 
         { nama: "UTS", bobot: Math.round(parseFloat(data.uts)) || 0 },
         { nama: "UAS", bobot: Math.round(parseFloat(data.uas)) || 0 },
       ];
       
       inputTugas.value = Math.round(parseFloat(data.assignment)) || 0;
-      inputQuiz.value = 0;
       inputUts.value = Math.round(parseFloat(data.uts)) || 0;
       inputUas.value = Math.round(parseFloat(data.uas)) || 0;
     } else {
@@ -80,7 +112,7 @@ const fetchAturanNilai = async () => {
 const bukaModal = () => { isModalOpen.value = true; };
 const tutupModal = () => { isModalOpen.value = false; };
 
-// --- SIMPAN / UPDATE DATA NILAI MENGGUNAKAN SERVICE ---
+// --- SIMPAN / UPDATE DATA NILAI ---
 const simpanAturanNilai = async () => {
   if (liveTotalInput.value !== 100) {
     alert(`Total akumulasi bobot harus tepat 100%. Saat ini: ${liveTotalInput.value}%`);
@@ -91,8 +123,8 @@ const simpanAturanNilai = async () => {
   try {
     const payload = {
       course_code: mataKuliahKode.value,
-      course_name: namaMataKuliah.value, // Nilai ini akan dinamis mengikuti apa yang diketik di input
-      assignment: Number(inputTugas.value) + Number(inputQuiz.value), 
+      course_name: namaMataKuliah.value, 
+      assignment: Number(inputTugas.value), // Pure hanya mengambil inputTugas
       uts: Number(inputUts.value),
       uas: Number(inputUas.value),
       lecturer_id: pengampuId.value || "019e4314-e2b6-729a-aced-f5cf529a1cee"
@@ -132,7 +164,10 @@ const kembaliKeDetailKelas = () => {
   });
 };
 
-onMounted(() => { fetchAturanNilai(); });
+onMounted(async () => { 
+  await fetchAturanNilai(); 
+  await fetchInfoKelasMaster();
+});
 </script>
 
 <template>
@@ -146,8 +181,26 @@ onMounted(() => { fetchAturanNilai(); });
                 <span class="mx-2 ">&gt;</span> 
                 <span>Aturan Nilai</span>
             </p>
-            <h1 class="text-[20px] font-bold mb-3">ATURAN NILAI</h1>
+
+            <div>
+                <h1 class="text-[20px] font-bold mb-6 mt-6">ATURAN NILAI</h1>
+                <div class="space-y-3 text-[14px]">
+                    <div class="flex">
+                        <span class="w-[140px] text-[14px] font-medium">Mata Kuliah</span>
+                        <span class="text-[14px] font-medium">
+                            : {{ namaMataKuliah || '-' }}
+                        </span>
+                    </div>
+                    <div class="flex">
+                        <span class="w-[140px] text-[14px] font-medium">Kelas</span>
+                        <span class=" font-medium text-[14px]">
+                            : {{ namaKelas || '-' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
         </div>
+        
         <div class="flex items-center gap-4 mt-4">
             <button @click="kembaliKeDetailKelas" class="bg-gray-200 text-slate-700 px-4 py-2 rounded-[4px] text-[12px] font-semibold hover:bg-gray-300 transition">
                 Kembali
@@ -186,7 +239,7 @@ onMounted(() => { fetchAturanNilai(); });
             </table>
 
             <div class="flex justify-end p-4 bg-gray-50/50 border-t border-gray-200">
-                <button v-if="!isDataExist" @click="bukaModal" type="button" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded text-[13px] font-medium transition shadow-sm">
+                <button v-if="!isDataExist" @click="bukaModal" type="button" class="bg-green-700 hover:bg-green-600 text-white px-5 py-2 rounded text-[13px] font-medium transition shadow-sm">
                     Tambah Penilaian
                 </button>
                 <button v-else @click="bukaModal" type="button" class="bg-blue-900 hover:bg-blue-800 text-white px-5 py-2 rounded text-[13px] font-medium transition shadow-sm">
@@ -196,8 +249,8 @@ onMounted(() => { fetchAturanNilai(); });
         </div>
     </div>
 
-    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
-        <div class="bg-white rounded-[4px] shadow-2xl w-full max-w-sm border border-gray-300 p-6 relative text-[13px] text-black pointer-events-auto">
+    <div v-if="isModalOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div class="bg-white rounded-[4px] shadow-2xl w-full max-w-sm border border-gray-300 p-6 relative text-[13px] text-black">
             
             <button type="button" @click="tutupModal" class="absolute top-4 right-5 text-black hover:opacity-70 text-[20px] font-light">&times;</button>
 
@@ -209,10 +262,8 @@ onMounted(() => { fetchAturanNilai(); });
             
             <form @submit.prevent="simpanAturanNilai" class="space-y-4">
                 <div class="text-left px-4">
-                    <label class="text-black font-semibold text-[12px] mb-1 block">Mata Kuliah</label>
-                    <div class="border-b border-black w-full">
-                        <input v-model="namaMataKuliah" type="text" class="w-full py-1 bg-transparent outline-none text-black font-normal" required placeholder="Masukkan Nama Mata Kuliah" />
-                    </div>
+                    <p class="text-black font-semibold text-[12px] mb-0.5">Mata Kuliah</p>
+                    <p class="font-normal text-black text-[13px] pl-2">{{ namaMataKuliah }}</p>
                 </div>
 
                 <div class="text-left px-4">
@@ -220,35 +271,27 @@ onMounted(() => { fetchAturanNilai(); });
                     <p class="font-normal text-black text-[13px] pl-2">{{ namaKelas }}</p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 px-4 pt-2">
+                <div class="grid grid-cols-3 gap-3 px-4 pt-2">
                     <div class="flex flex-col items-start">
                         <label class="text-black font-medium mb-1">Tugas</label>
                         <div class="relative w-full border-b border-black">
-                            <input v-model.number="inputTugas" type="number" min="0" max="100" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
+                            <input v-model.number="inputTugas" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
                             <span class="absolute right-1 bottom-1 text-[11px] text-black">%</span>
                         </div>
                     </div>
-                    <div class="flex flex-col items-start">
-                        <label class="text-black font-medium mb-1">Quiz</label>
-                        <div class="relative w-full border-b border-black">
-                            <input v-model.number="inputQuiz" type="number" min="0" max="100" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
-                            <span class="absolute right-1 bottom-1 text-[11px] text-black">%</span>
-                        </div>
-                    </div>
-                </div>
 
-                <div class="grid grid-cols-2 gap-4 px-4 pt-2">
                     <div class="flex flex-col items-start">
                         <label class="text-black font-medium mb-1">UTS</label>
                         <div class="relative w-full border-b border-black">
-                            <input v-model.number="inputUts" type="number" min="0" max="100" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
+                            <input v-model.number="inputUts" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
                             <span class="absolute right-1 bottom-1 text-[11px] text-black">%</span>
                         </div>
                     </div>
+
                     <div class="flex flex-col items-start">
                         <label class="text-black font-medium mb-1">UAS</label>
                         <div class="relative w-full border-b border-black">
-                            <input v-model.number="inputUas" type="number" min="0" max="100" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
+                            <input v-model.number="inputUas" class="w-full text-center py-1 bg-transparent outline-none text-black font-medium" required />
                             <span class="absolute right-1 bottom-1 text-[11px] text-black">%</span>
                         </div>
                     </div>
