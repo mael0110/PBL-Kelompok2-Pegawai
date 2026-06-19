@@ -427,7 +427,7 @@ const lihatNilai = () => {
           <p>Semester</p><p>{{ infoKelas.semester }}</p>
           <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
           <p>SKS</p><p>{{ infoKelas.sks }}</p>
-          <p>Tahun Academic</p><p>{{ infoKelas.tahunAkademik }}</p>
+          <p>Tahun Akademik</p><p>{{ infoKelas.tahunAkademik }}</p>
         </div>
       </div>
 
