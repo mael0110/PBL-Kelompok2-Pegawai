@@ -73,6 +73,24 @@ const konversiKeHari = (dateString) => {
   }
 };
 
+// 🟢 FUNGSI HELPER BARU: Mengubah format tulisan mentah prodi backend menjadi tulisan baku resmi
+const formatNamaProdi = (prodiString) => {
+  if (!prodiString || prodiString === "-") return "-";
+  
+  // Normalisasi string mentah dari backend (hilangkan spasi berlebih, ubah ke lowercase)
+  const cleanString = String(prodiString).trim().toLowerCase();
+  
+  // Jika mendeteksi string 'teknik-infromatika' atau variasi salah ketik bawaan backend lainnya
+  if (cleanString === "teknik-infromatika" || cleanString === "teknik-informatika" || cleanString === "teknik informatika") {
+    return "Teknik Informatika";
+  }
+  
+  // Fallback cadangan: Mengubah format snake-case/kebab-case menjadi kapital perkata otomatis jika ada prodi lain
+  return cleanString
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 const fetchSesiPelajaran = async () => {
   if (!pengampuId.value) return;
 
@@ -153,6 +171,9 @@ const fetchSesiPelajaran = async () => {
         tahunFormat = `${awal}/${akhir} ${tipeKapital}`.trim();
       }
 
+      // Ambil nama prodi mentah dari backend
+      const rawProdiName = dataProdiCocok?.prodi?.name || "-";
+
       infoKelas.value = {
         mataKuliah: first.course_name,
         kode: first.course_code,
@@ -164,7 +185,8 @@ const fetchSesiPelajaran = async () => {
         sks: first.sks || sksHasilPencarian,
         ruangan: dataProdiCocok?.room?.name || dataProdiCocok?.ruangan || "-",
         semester: dataProdiCocok ? formatSemesterTerbilang(dataProdiCocok.semester) : "-",
-        prodi: dataProdiCocok?.prodi?.name || "-",
+        // 🟢 PERBAIKAN DI SINI: Bungkus rawProdiName dengan fungsi formatter yang dibuat di atas
+        prodi: formatNamaProdi(rawProdiName),
         tahunAkademik: tahunFormat
       };
     }
@@ -389,7 +411,7 @@ const lihatNilai = () => {
     </div>    
   </div>
 
-  <div class="bg-gray-100 min-h-screen flex gap-4 mt-4">
+  <div class="bg-gray-100 flex gap-4 mt-4">
     <div class="bg-white p-3 w-[230px] rounded shadow text-[12px]">
       <button
         @click="activeTab = 'informasi'"
@@ -428,6 +450,106 @@ const lihatNilai = () => {
           <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
           <p>SKS</p><p>{{ infoKelas.sks }}</p>
           <p>Tahun Akademik</p><p>{{ infoKelas.tahunAkademik }}</p>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'informasi'" class="bg-white p-4 rounded shadow text-[12px]">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-semibold text-[15px]">Sesi Pembelajaran</h2>
+        </div>
+        <table class="w-full text-[12px] border-collapse">
+          <thead class="bg-blue-100">
+            <tr>
+              <th class="p-2 text-center">Tanggal</th>
+              <th class="p-2 text-center">Pertemuan</th>
+              <th class="p-2 text-center">Materi</th>
+              <th class="p-2 text-center">Status</th>
+              <th class="p-2 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in sesiList.slice(0, 3)" :key="s.id" class="hover:bg-gray-50 border-b border-gray-300">
+              <td class="p-2 text-center">{{ s.tanggal }}</td>
+              <td class="p-2 text-center">Sesi ke-{{ s.number }}</td>
+              <td class="p-2 text-center">{{ s.materi }}</td>
+              <td class="p-2 text-center">
+                <span class="text-white px-4 py-1 rounded inline-block text-center min-w-[95px]"
+                      :class="{
+                        'bg-green-600': s.uiStatus === 'Selesai',
+                        'bg-orange-500': s.uiStatus === 'Berjalan',
+                        'bg-blue-900': s.uiStatus === 'Terjadwal'
+                      }">
+                  {{ s.uiStatus }}
+                </span>
+              </td>
+              <td class="p-2 text-center">
+                <button @click="handleSesiClick(s)"
+                        class="border border-blue-900 text-blue-900 px-4 py-1 rounded hover:bg-blue-900 hover:text-white transition">
+                  {{ s.uiStatus === 'Terjadwal' ? 'Buka Sesi' : 'Lihat Sesi' }}
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <div class="text-center mt-3 justify-center">
+          <button @click="activeTab = 'sesi'" class="text-blue-900 text-[12px] font-semibold hover:text-blue-700">
+            Lihat Semua Sesi
+          </button>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'informasi'" class="grid grid-cols-2 gap-4 mt-5">
+        <div class="bg-white p-4 rounded shadow">
+          <h2 class="text-[13px] font-semibold mb-3">Pengajar</h2>
+          <div class="flex items-center gap-3 border border-gray-300 rounded-lg p-3 bg-white">
+            <div class="w-[60px] h-[60px] rounded-full bg-blue-100 flex items-center justify-center">
+              <UserRound class="w-7 h-7 text-blue-900" />
+            </div>
+
+            <div>
+              <h3 class="text-[13px] font-semibold">
+                {{ infoKelas.dosen }}
+              </h3>
+
+              <p class="text-[11px] ">
+                Dosen Pengampu
+              </p>
+
+              <p class="text-[11px] ">
+                222233334444555566@pegawai.com
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 rounded shadow">
+          <h2 class="text-[13px] font-semibold mb-3">Peserta Kelas</h2>
+
+          <div class="flex items-center gap-4">
+
+            <div class="w-[70px] h-[70px] rounded-full bg-blue-100 flex items-center justify-center">
+              <Users class="w-10 h-10 text-blue-900" />
+            </div>
+
+            <div class="flex-1">
+
+              <div class="text-[14px] font-semibold">
+                {{ totalMahasiswa }} Mahasiswa
+              </div>
+
+              <div class="text-[11px] mb-2">
+                Daftar Seluruh Peserta Kelas ini.
+              </div>
+
+              <button
+                @click="activeTab = 'peserta'"
+                class="border border-blue-900 text-blue-900 px-3 py-1 rounded text-[11px] hover:bg-blue-900 hover:text-white transition"
+              >
+                Lihat Daftar Peserta
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -528,15 +650,15 @@ const lihatNilai = () => {
         <button @click="closeModal" class="absolute top-3 right-4 text-gray-500 text-xl font-bold hover:text-black">×</button>
 
         <div class="flex justify-center mb-2">
-          <CalendarClock class="w-12 h-12 text-blue-900" />
+          <CalendarClock class="w-12 h-12" />
         </div>
 
-        <h2 class="text-center text-[16px] font-bold mb-4 text-slate-800">Buka Sesi Perkuliahan</h2>
+        <h2 class="text-center text-[16px] font-bold mb-4">Buka Sesi Perkuliahan</h2>
 
         <div class="rounded-[6px] p-3 mb-4 bg-gray-50 border border-gray-200">
-          <h3 class="font-bold text-[13px] text-slate-700">{{ selectedJadwal.mataKuliah }}</h3>
+          <h3 class="font-bold text-[13px] ">{{ selectedJadwal.mataKuliah }}</h3>
           <p class="text-[11px] text-gray-400 mb-2">Sesi ke-{{ selectedJadwal.number }}</p>
-          <label class="block text-[11px] font-semibold mb-1 text-slate-600">Topik Pembelajaran</label>
+          <label class="block text-[11px] font-semibold mb-1">Topik Pembelajaran</label>
           <input
             v-model="topikKelas"
             type="text"
@@ -548,7 +670,7 @@ const lihatNilai = () => {
         <p class="text-center text-[11px] text-gray-500 mb-5">Apakah Anda yakin ingin membuka sesi perkuliahan?<br/><span class="text-[10px] text-gray-400">Mahasiswa dapat mengisi daftar presensi setelah sesi diaktifkan.</span></p>
 
         <div class="flex gap-3">
-          <button @click="closeModal" class="w-full border border-gray-300 text-gray-700 font-semibold py-1.5 rounded text-[12px] hover:bg-gray-100">Batal</button>
+          <button @click="closeModal" class="w-full border text-white font-semibold py-1.5 rounded text-[12px] hover:bg-red-400 bg-red-500">Batal</button>
           <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-1.5 rounded text-[12px] hover:bg-blue-800">Buka Sesi</button>
         </div>
       </div>

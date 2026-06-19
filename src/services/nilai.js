@@ -95,26 +95,48 @@ export const nilaiService = () => {
 
       return res.data;
     } catch (error) {
-    console.error("❌ Axios Error Mentah:", error);
+      console.error("❌ Axios Error Mentah:", error);
 
-    if (error.response && error.response.data instanceof Blob) {
-      const reader = new FileReader();
-      
-      reader.onload = () => {
-        try {
-          const errorPesan = JSON.parse(reader.result);
-          console.log("🔥 PESAN ERROR VALIDASI DARI BACKEND:", errorPesan);
-          alert("Gagal: " + (errorPesan.message || "Validasi backend gagal. Cek konsol."));
-        } catch (e) {
-          console.log("Isi teks error (bukan JSON):", reader.result);
-        }
-      };
-      
-      reader.readAsText(error.response.data);
-    } else {
-      console.error("Gagal mendownload template:", error.message);
-      alert("Gagal mendownload template: " + error.message);
+      if (error.response && error.response.data instanceof Blob) {
+        const reader = new FileReader();
+        
+        reader.onload = () => {
+          try {
+            const errorPesan = JSON.parse(reader.result);
+            console.log("🔥 PESAN ERROR VALIDASI DARI BACKEND:", errorPesan);
+            alert("Gagal: " + (errorPesan.message || "Validasi backend gagal. Cek konsol."));
+          } catch (e) {
+            console.log("Isi teks error (bukan JSON):", reader.result);
+          }
+        };
+        
+        reader.readAsText(error.response.data);
+      } else {
+        console.error("Gagal mendownload template:", error.message);
+        alert("Gagal mendownload template: " + error.message);
+      }
+      throw error;
     }
+  };
+
+  // 🔥 BARU: API Import / Upload File Excel Nilai
+  const uploadTemplateNilai = async (formData) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await axios.post(
+        "https://api-pegawai-4a.akufarish.my.id:1234/api/grade-imports",
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data",
+            Accept: "application/json"
+          }
+        }
+      );
+      return response.data;
+    } catch (error) {
+      console.error("Error di uploadTemplateNilai:", error.response?.data || error);
       throw error;
     }
   };
@@ -124,5 +146,6 @@ export const nilaiService = () => {
     createAturanNilai,
     updateAturanNilai,
     downloadTemplateNilai,
+    uploadTemplateNilai // 🔥 Daftarkan fungsinya di sini
   };
 };

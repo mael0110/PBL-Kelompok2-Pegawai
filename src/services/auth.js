@@ -52,11 +52,13 @@ export function authService() {
     }
   }
 
-  async function getProfile(employeeId) {
+  async function getProfile() {
     const token = localStorage.getItem("token");
+    
+    const defaultEmployeeId = "019ece8d-2ada-703a-81d6-d07c4b239957";
 
     const res = await axios.get(
-      `https://api-pegawai-4a.akufarish.my.id:1234/api/employees/${employeeId}`,
+      `https://api-pegawai-4a.akufarish.my.id:1234/api/employees/${defaultEmployeeId}`, 
       {
         headers: {
           Authorization: `Bearer ${token}`,

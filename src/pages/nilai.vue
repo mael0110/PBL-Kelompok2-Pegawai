@@ -9,7 +9,8 @@ import { kelasService } from "../services/kelas";
 const route = useRoute();
 const router = useRouter();
 
-const { downloadTemplateNilai } = nilaiService(); 
+// 🔥 BARU: Destruktur fungsi uploadTemplateNilai
+const { downloadTemplateNilai, uploadTemplateNilai } = nilaiService(); 
 const { getKelasByProdi, getMahasiswaKelas } = kelasService();
 
 const mataKuliahKode = computed(() => route.query.kode || route.params.kode || "");
@@ -74,7 +75,7 @@ const fetchMahasiswaDariKelas = async () => {
         let studentObj = {};
         
         if (m.mahasiswa && Array.isArray(m.mahasiswa) && m.mahasiswa.length > 0) {
-          studentObj = m.mahasiswa[0]; // Mengambil objek di dalam Array(1)
+          studentObj = m.mahasiswa[0];
         } else if (m.mahasiswa) {
           studentObj = m.mahasiswa;
         } else {
@@ -113,13 +114,64 @@ const handleFileChange = (e) => {
 
 const uploadNilai = async () => {
   if (!file.value) return;
+
+  // Validasi ukuran file (Maksimal 2048 KB / 2 MB)
+  const maxSizeInBytes = 2048 * 1024;
+  if (file.value.size > maxSizeInBytes) {
+    alert("Gagal: Ukuran file tidak boleh lebih dari 2048 KB (2 MB).");
+    return;
+  }
+
   loading.value = true;
   try {
-    alert(`File ${file.value.name} berhasil dipilih. Mengompres data...`);
-    file.value = null;
-    await fetchMahasiswaDariKelas();
+    // 1. Ambil teks kode dasar
+    const baseCode = String(mataKuliahKode.value || route.query.kode || route.params.kode || "MK").trim();
+    
+    // 2. 🔥 BERSIHKAN TOTAL: Hapus semua spasi di tengah maupun di ujung teks agar tidak dihitung karakter tambahan
+    const strictCleanCode = baseCode.replace(/\s+/g, '');
+
+    // 3. Potong maksimal 10 karakter untuk jaga-jaga
+    const finalCourseCode = strictCleanCode.substring(0, 10);
+
+    // Bersihkan nama matkul dan kelas
+    const cleanCourseName = String(route.query.namaMatkul || namaMataKuliah.value || "Mata Kuliah").trim();
+    const cleanClassName = String(route.query.namaKelas || namaKelas.value || "Kelas").trim();
+    const cleanClassId = String(classId.value || "").trim();
+
+    // Siapkan FormData
+    const formData = new FormData();
+    formData.append("file", file.value);
+    formData.append("class_id", cleanClassId);
+    formData.append("class_name", cleanClassName);
+    formData.append("course_code", finalCourseCode); // Dijamin bersih tanpa spasi hantu ("C0320101")
+    formData.append("course_name", cleanCourseName);
+
+    console.log("🚀 MENGIRIM FORM DATA STERIL:", {
+      class_id: cleanClassId,
+      class_name: cleanClassName,
+      course_code: finalCourseCode,
+      course_name: cleanCourseName
+    });
+
+    const res = await uploadTemplateNilai(formData);
+
+    if (res && (res.success || res.code === 200)) {
+      alert("File excel nilai berhasil di-upload!");
+      file.value = null; // Reset input file
+      await fetchMahasiswaDariKelas(); // Refresh tabel nilai
+    } else {
+      alert(res?.message || "Gagal mengunggah template excel nilai.");
+    }
   } catch (err) {
-    console.error("Gagal upload nilai:", err);
+    console.error("❌ Gagal upload nilai:", err);
+    const errorData = err.response?.data;
+    const pesanError = errorData?.message || "Terjadi kesalahan jaringan atau validasi sistem.";
+    
+    if (errorData?.errors) {
+      console.log("🔍 Detail Eror Validasi Backend:", errorData.errors);
+    }
+    
+    alert("Gagal Upload: " + pesanError);
   } finally {
     loading.value = false;
   }
@@ -135,7 +187,7 @@ const handleDownloadTemplate = async () => {
   try {
     let rawCode = mataKuliahKode.value || route.query.kode || "MK-001";
     if (rawCode.length > 10) {
-      console.warn(`Kode matkul "${rawCode}" dipotong karena melebihi batas maksimal 10 karakter.`);
+      console.warn("Kode matkul dipotong karena melebihi batas maksimal 10 karakter.");
       rawCode = rawCode.substring(0, 10);
     }
 
@@ -204,7 +256,7 @@ onMounted(async () => {
                 </div>
             </div>
           </div>
-          <button @click="kembaliKeDetailKelas" class="bg-gray-200 text-slate-700 px-4 py-2 rounded text-[12px] font-semibold mt-4 hover:bg-gray-300">
+          <button @click="kembaliKeDetailKelas" :disabled="loading" class="bg-gray-200 text-slate-700 px-4 py-2 rounded text-[12px] font-semibold mt-4 hover:bg-gray-300 disabled:opacity-50">
               Kembali
           </button>
       </div>
@@ -212,25 +264,27 @@ onMounted(async () => {
       <div class="bg-white p-5 rounded-lg shadow mb-6 border border-gray-200">
         <p class="font-semibold mb-3 text-[14px]">Upload Section</p>
         <label class="border-2 border-dashed border-blue-300 bg-blue-50/30 rounded-lg h-[160px] flex flex-col items-center justify-center cursor-pointer hover:bg-blue-100/50 transition">
-          <input type="file" class="hidden" @change="handleFileChange" />
+          <input type="file" class="hidden" @change="handleFileChange" accept=".xlsx, .xls, .csv" :disabled="loading" />
           <Upload class="w-10 h-10 text-blue-700 mb-2" />
           <p class="text-[13px] font-medium text-slate-700">
-            {{ file ? `File: ${file.name}` : 'Tarik dan Jatuhkan File Nilai di Sini atau Klik untuk Menjelah (Format File yang didukung:xlsx, csv)' }}
+            {{ file ? `File terpilih: ${file.name}` : 'Tarik dan Jatuhkan File Nilai di Sini atau Klik untuk Menjelajah (Format File yang didukung: xlsx, csv)' }}
           </p>
         </label>
         <div class="flex gap-3 mt-4">
           <button @click="handleDownloadTemplate" :disabled="loading || nilaiData.length === 0" class="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-800 rounded text-[13px] font-medium hover:bg-blue-50 disabled:opacity-50">
             <Download class="w-4 h-4" /> Download Template
           </button>
-          <button @click="file = null" class="px-4 py-2 bg-gray-200 rounded text-[13px] text-slate-700 hover:bg-gray-300">Batal</button>
-          <button @click="uploadNilai" :disabled="loading || !file" class="px-4 py-2 bg-blue-900 text-white rounded text-[13px] hover:bg-blue-800 disabled:opacity-50">Upload</button>
+          <button @click="file = null" :disabled="loading || !file" class="px-4 py-2 bg-red-500 rounded text-[13px] text-white text-slate-700 hover:bg-red-400 disabled:opacity-50">Batal</button>
+          <button @click="uploadNilai" :disabled="loading || !file" class="px-4 py-2 bg-blue-900 text-white rounded text-[13px] hover:bg-blue-800 disabled:opacity-50">
+            {{ loading ? 'Mengupload...' : 'Upload' }}
+          </button>
         </div>
       </div>
 
       <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-        <div v-if="loading" class="p-8 text-center text-gray-400 text-[13px]">Memuat data mahasiswa...</div>
+        <div v-if="loading && nilaiData.length === 0" class="p-8 text-center text-gray-400 text-[13px]">Memuat data mahasiswa...</div>
         <table v-else class="w-full text-[13px]">
-          <thead class="bg-blue-50 text-slate-800 border-b border-gray-200 font-semibold">
+          <thead class="bg-blue-200 text-slate-800 border-b border-gray-200 font-semibold">
             <tr>
               <th class="p-3 text-left w-32">NIM</th>
               <th class="p-3 text-left">Nama</th>
@@ -243,7 +297,7 @@ onMounted(async () => {
           </thead>
           <tbody class="text-slate-900">
             <tr v-if="nilaiData.length === 0">
-                <td colspan="8" class="p-8 text-center text-gray-400 italic bg-gray-50/20">
+                <td colspan="7" class="p-8 text-center text-gray-400 italic bg-gray-50/20">
                     Tidak ada data mahasiswa pada kelas ini atau database kosong.
                 </td>
             </tr>

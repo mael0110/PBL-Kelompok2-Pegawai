@@ -9,8 +9,8 @@ import { kelasService } from "../services/kelas";
 const router = useRouter();
 
 const { presensiDosen } = presensiService();
-// Mengganti getSesiPengampu menjadi getAllSesiDosen sesuai service Anda
-const { getAllSesiDosen } = kelasService();
+// 🟢 Ditambahkan updateJadwal untuk kebutuhan aktivasi sesi via popup
+const { getAllSesiDosen, updateJadwal } = kelasService();
 
 // Tanggal hari ini
 const today = new Date();
@@ -35,11 +35,37 @@ const listSemuaSesi = ref([]);
 const currentDate = ref(new Date());
 const selectedDate = ref(new Date()); 
 
+// 🟢 STATE BARU: Untuk Mengelola Popup Buka Sesi
+const showModalBukaSesi = ref(false);
+const topikKelas = ref("");
+const selectedJadwal = ref({
+  id: "",
+  mataKuliah: "",
+  number: "",
+  class_id: "",
+  pengampu_id: "",
+  course_code: ""
+});
+
 // Helper format tanggal dua digit (YYYY-MM-DD) agar cocok dengan database
 const formatKeYYYYMMDD = (tahun, bulan, tanggal) => {
   const mm = String(bulan + 1).padStart(2, '0');
   const dd = String(tanggal).padStart(2, '0');
   return `${tahun}-${mm}-${dd}`;
+};
+
+// --- FUNGSI HELPER: Menentukan UI Status Tombol (Sama persis dengan detail-kelas.vue) ---
+const dapatkanUiStatus = (sesi) => {
+  if (sesi.status === "opened") {
+    return "Berjalan";
+  } else if (sesi.status === "closed") {
+    if (sesi.topic && sesi.topic !== "" && sesi.topic !== "-") {
+      return "Selesai";
+    } else {
+      return "Terjadwal";
+    }
+  }
+  return "Terjadwal";
 };
 
 // --- COMPUTED: JADWAL KELAS HARI INI (DINAMIS DARI API) ---
@@ -49,7 +75,6 @@ const jadwalKelasHariIniDinamis = computed(() => {
     today.getMonth(),
     today.getDate()
   );
-  // Menyaring seluruh sesi mengajar yang jatuh pada hari ini saja
   return listSemuaSesi.value.filter(sesi => sesi.session_date === tanggalHariIniString);
 });
 
@@ -59,7 +84,6 @@ const fetchSesiKalender = async () => {
     listSemuaSesi.value = []; 
     let tempCombinedData = [];
 
-    // 1. Ambil Halaman Pertama menggunakan getAllSesiDosen
     const firstPageResult = await getAllSesiDosen(null, 1);
     
     if (firstPageResult && firstPageResult.success) {
@@ -68,7 +92,6 @@ const fetchSesiKalender = async () => {
 
       const lastPage = firstPageResult.meta?.last_page || 1;
 
-      // 2. Looping Ambil Halaman Sisa
       for (let currentPage = 2; currentPage <= lastPage; currentPage++) {
         const nextPageResult = await getAllSesiDosen(null, currentPage);
         if (nextPageResult && nextPageResult.success) {
@@ -77,7 +100,6 @@ const fetchSesiKalender = async () => {
         }
       }
 
-      // 3. Simpan Seluruh Hasil Gabungan Data Halaman ke State Kalender
       listSemuaSesi.value = tempCombinedData;
       console.log("Berhasil menggabungkan seluruh halaman sesi:", listSemuaSesi.value.length);
     }
@@ -148,18 +170,83 @@ const labelHariTerpilih = computed(() => {
   return selectedDate.value.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" });
 });
 
-// Arahkan ke halaman detail sesi absensi mahasiswa
-const navigasiKeDetailSesi = (sesi) => {
-  router.push({
-    path: "/detail-sesi",
-    query: {
+// 🟢 LOGIKA HANDLER KLIK TOMBOL (Menyamakan alur dengan detail-kelas.vue)
+const handleSesiClick = (sesi) => {
+  if (!sesi) return;
+
+  const uiStatus = mendapatkanUiStatus(sesi);
+
+  if (uiStatus === 'Berjalan' || uiStatus === 'Selesai') {
+    // Alur langsung navigasi jika kelas sedang/sudah selesai dibuka
+    router.push({
+      path: "/detail-sesi",
+      query: {
+        id: sesi.id,
+        class_id: sesi.class_id,
+        classId: sesi.class_id,
+        pengampuId: sesi.pengampu_id,
+        kode: sesi.course_code
+      }
+    });
+  } else {
+    // Alur memunculkan Pop Up input topik jika statusnya 'Terjadwal' (Belum pernah dibuka)
+    selectedJadwal.value = {
       id: sesi.id,
+      mataKuliah: sesi.course_name,
+      number: sesi.session_number,
       class_id: sesi.class_id,
-      classId: sesi.class_id,
-      pengampuId: sesi.pengampu_id,
-      kode: sesi.course_code
+      pengampu_id: sesi.pengampu_id,
+      course_code: sesi.course_code
+    };
+    topikKelas.value = (sesi.topic && sesi.topic !== "-") ? sesi.topic : "";
+    showModalBukaSesi.value = true;
+  }
+};
+
+// 🟢 FUNGSI SUBMIT UNTUK AKTIVASI/BUKA SESI PERKULIAHAN
+const bukaSesiPerkuliahan = async () => {
+  if (!topikKelas.value.trim()) {
+    alert("Mohon masukkan topik kelas terlebih dahulu!");
+    return;
+  }
+
+  try {
+    const payload = { 
+      topic: topikKelas.value,
+      status: "opened"
+    };
+
+    const res = await updateJadwal(selectedJadwal.value.id, payload);
+
+    if (res?.success || res?.code === 200 || res?.status === 200) {
+      showModalBukaSesi.value = false;
+      topikKelas.value = "";
+
+      // Lempar langsung ke page detail sesi setelah sukses diaktifkan
+      router.push({
+        path: "/detail-sesi",
+        query: {
+          id: selectedJadwal.value.id,
+          class_id: selectedJadwal.value.class_id,
+          classId: selectedJadwal.value.class_id,
+          pengampuId: selectedJadwal.value.pengampu_id,
+          kode: selectedJadwal.value.course_code
+        }
+      });
+    } else {
+      alert("Gagal mengaktifkan sesi perkuliahan.");
     }
-  });
+  } catch (error) {
+    console.error("❌ Gagal buka sesi via dashboard:", error);
+    const pesanServer = error.response?.data?.errors?.status?.[0] || error.message;
+    alert(`Gagal membuka sesi. Pesan: ${pesanServer}`);
+  }
+};
+
+const closeModalBukaSesi = () => {
+  showModalBukaSesi.value = false;
+  selectedJadwal.value = { id: "", mataKuliah: "", number: "", class_id: "", pengampu_id: "", course_code: "" };
+  topikKelas.value = "";
 };
 
 // --- LOGIKA PRESENSI DOSEN ASLI SEBELUMNYA ---
@@ -238,8 +325,11 @@ onMounted(() => {
                 </div>
               </div>
 
-              <button @click="navigasiKeDetailSesi(sesi)" class="bg-blue-900 text-white text-[11px] font-semibold px-4 py-2 rounded-[6px] shadow-sm hover:bg-blue-800 transition">
-                Buka Sesi
+              <button 
+                @click="handleSesiClick(sesi)" 
+                class="bg-blue-900 text-white text-[11px] font-semibold px-4 py-2 rounded-[6px] shadow-sm hover:bg-blue-800 transition"
+              >
+                {{ dapatkanUiStatus(sesi) === 'Terjadwal' ? 'Buka Sesi' : 'Lihat Sesi' }}
               </button>
             </div>
 
@@ -287,34 +377,6 @@ onMounted(() => {
       </div>
       
       <div class="w-[500px] flex flex-col space-y-5">
-        <!-- <div class="bg-white rounded-[10px] shadow-sm border border-gray-100 p-5">
-          <h1 class="text-[14px] font-bold text-gray-800 mb-3">REKAP PRESENSI HARI INI</h1>
-
-          <div class="bg-blue-50/70 rounded-[8px] p-2 flex items-center gap-3 mb-4 w-fit px-4 border border-blue-100/50">
-            <Users class="w-5 h-5 text-blue-900" />
-            <div>
-              <p class="text-[11px] text-gray-500 font-medium">Total Mahasiswa Diampu</p>
-              <p class="text-[13px] font-bold text-blue-950">120 Mahasiswa</p>
-            </div>
-          </div>
-
-          <div class="space-y-3.5">
-            <div v-for="(item, index) in presensi" :key="index" class="grid grid-cols-[60px_1fr_25px_35px] items-center gap-3">
-              <div class="flex items-center gap-2">
-                <div class="w-2.5 h-2.5 rounded-full" :class="item.color"></div>
-                <p class="text-[12px] font-medium text-gray-600">{{ item.label }}</p>
-              </div>
-
-              <div class="w-full bg-gray-100 h-2 rounded-full">
-                <div class="h-2 rounded-full transition-all duration-500" :class="item.color" :style="{ width: item.width }"></div>
-              </div>
-
-              <p class="text-[12px] font-bold text-gray-700 text-right">{{ item.jumlah }}</p>
-              <p class="text-[11px] font-medium text-gray-400 text-right">{{ item.percent }}</p>
-            </div>
-          </div>
-        </div> -->
-
         <div class="bg-white shadow-sm border border-gray-100 rounded-[10px] p-4">
           <h3 class="font-bold text-[14px] text-gray-800 mb-4">Kalender Akademik</h3>
 
@@ -385,10 +447,10 @@ onMounted(() => {
                     Ruang H-205
                   </span>
                   <button 
-                    @click="navigasiKeDetailSesi(sesi)"
+                    @click="handleSesiClick(sesi)"
                     class="bg-blue-900 text-white text-[10px] font-bold px-3 py-1.5 rounded-[5px] shadow-sm hover:bg-blue-800 transition mt-3"
                   >
-                    Lihat Detail Sesi
+                    {{ dapatkanUiStatus(sesi) === 'Terjadwal' ? 'Buka Sesi' : 'Lihat Sesi' }}
                   </button>
                 </div>
               </div>
@@ -418,6 +480,37 @@ onMounted(() => {
         <button @click="submitPresensi" class="w-full bg-blue-900 text-white py-2 rounded-[6px] text-[12px] font-bold disabled:bg-gray-300 shadow-sm" :disabled="!statusPresensi">
           Kirim Data Presensi
         </button>
+      </div>
+    </div>
+
+    <div v-if="showModalBukaSesi" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-white w-[420px] rounded-[8px] p-6 relative shadow-xl border border-gray-200">
+        <button @click="closeModalBukaSesi" class="absolute top-3 right-4 text-gray-500 text-xl font-bold hover:text-black">×</button>
+
+        <div class="flex justify-center mb-2">
+          <CalendarClock class="w-12 h-12 text-blue-900" />
+        </div>
+
+        <h2 class="text-center text-[16px] font-bold mb-4">Buka Sesi Perkuliahan</h2>
+
+        <div class="rounded-[6px] p-3 mb-4 bg-gray-50 border border-gray-200">
+          <h3 class="font-bold text-[13px] text-gray-800">{{ selectedJadwal.mataKuliah }}</h3>
+          <p class="text-[11px] text-gray-400 mb-2">Sesi ke-{{ selectedJadwal.number }}</p>
+          <label class="block text-[11px] font-semibold mb-1 text-gray-700">Topik Pembelajaran</label>
+          <input
+            v-model="topikKelas"
+            type="text"
+            placeholder="Masukkan topik perkuliahan hari ini..."
+            class="w-full border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none bg-white focus:border-blue-900"
+          />
+        </div>
+
+        <p class="text-center text-[11px] text-gray-500 mb-5">Apakah Anda yakin ingin membuka sesi perkuliahan?<br/><span class="text-[10px] text-gray-400">Mahasiswa dapat mengisi daftar presensi setelah sesi diaktifkan.</span></p>
+
+        <div class="flex gap-3">
+          <button @click="closeModalBukaSesi" class="w-full border text-white font-semibold py-1.5 rounded text-[12px] hover:bg-red-400 bg-red-500">Batal</button>
+          <button @click="bukaSesiPerkuliahan" class="w-full bg-blue-900 text-white font-semibold py-1.5 rounded text-[12px] hover:bg-blue-800">Buka Sesi</button>
+        </div>
       </div>
     </div>
   </adminLayout>
