@@ -14,12 +14,13 @@ const search = ref("");
 const currentPage = ref(1);
 const searchPeserta = ref("");
 
-const classId = ref(route.query.class_id || route.query.classId || route.query.id || "");
+// 🔥 PERBAIKAN URUTAN PRIORITAS: Ambil classId yang murni dikirim dari Klik data Kelas Saya
+const classId = ref(route.query.classId || route.query.class_id || route.query.id || "");
 const mataKuliahKode = computed(() => route.query.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
 
-console.log("ROUTE QUERY:", route.query);
-console.log("CLASS ID:", classId.value);
+console.log("ROUTE QUERY SESUAI KLIK:", route.query);
+console.log("CLASS ID DIAKTIFKAN:", classId.value);
 console.log("PENGAMPU ID:", pengampuId.value);
 
 const activeTab = ref("informasi");
@@ -40,7 +41,7 @@ const infoKelas = ref({
 });
 const sesiList = ref([]);
 const pesertaKelas = ref([]);
-const totalMahasiswa = ref(0);
+const totalMahasiswa = ref(0); // Menampung jumlah riil mahasiswa
 const topikKelas = ref("");
 const showModal = ref(false);
 
@@ -131,10 +132,9 @@ const fetchSesiPelajaran = async () => {
         console.error("Gagal get prodi master:", prodiErr);
       }
 
-      // 🔥 LOGIKA BARU UNTUK MENCARI SKS DI DALAM ARRAY kurikulum_mk
+      // LOGIKA UNTUK MENCARI SKS DI DALAM ARRAY kurikulum_mk
       let sksHasilPencarian = "-";
       if (dataProdiCocok?.kurikulum?.kurikulum_mk && Array.isArray(dataProdiCocok.kurikulum.kurikulum_mk)) {
-        // Cari matakuliah berdasarkan kode yang sama dengan first.course_code
         const mkCocok = dataProdiCocok.kurikulum.kurikulum_mk.find(item => 
           String(item?.mata_kuliah?.kode).trim().toLowerCase() === String(first.course_code).trim().toLowerCase()
         );
@@ -158,21 +158,15 @@ const fetchSesiPelajaran = async () => {
         kode: first.course_code,
         kelas: first.class_name,
         dosen: first.lecturer?.employee_name,
-        peserta: first.total_mahasiswa || 0,
+        peserta: pesertaKelas.value.length || first.total_mahasiswa || 0,
         hari: hariHasilKonversi, 
         waktu: `${first.start_time} - ${first.end_time}`,
-        
-        // 🔥 SKS sekarang diambil dari first.sks atau sksHasilPencarian array kurikulum_mk
         sks: first.sks || sksHasilPencarian,
-        
-        // Mengisi data kosong hasil pencocokan prodi master
         ruangan: dataProdiCocok?.room?.name || dataProdiCocok?.ruangan || "-",
         semester: dataProdiCocok ? formatSemesterTerbilang(dataProdiCocok.semester) : "-",
         prodi: dataProdiCocok?.prodi?.name || "-",
         tahunAkademik: tahunFormat
       };
-
-      totalMahasiswa.value = first.total_mahasiswa || 0;
     }
 
   } catch (err) {
@@ -197,7 +191,7 @@ const fetchPesertaKelas = async () => {
             id: m.mahasiswa_id || Math.random().toString(),
             nama: m.name || "Nama Kosong",
             email: m.email || "-",
-            nim: m.nim || "-" // Langsung panggil field 'nim' yang dikirim dari service!
+            nim: m.nim || "-"
           }));
         }
         return [];
@@ -205,6 +199,10 @@ const fetchPesertaKelas = async () => {
     } else {
       pesertaKelas.value = [];
     }
+
+    // 🔥 BARU: Sinkronisasi counter utama di atas agar langsung mengikuti panjang array murni kelompok 1
+    totalMahasiswa.value = pesertaKelas.value.length;
+    infoKelas.value.peserta = pesertaKelas.value.length;
 
     console.log("🚀 STATE PESERTA SIAP DI-RENDER:", pesertaKelas.value);
   } catch (error) {
@@ -221,21 +219,22 @@ const filteredPeserta = computed(() => {
 });
 
 // Hooks & Watchers
-onMounted(() => {
-  fetchSesiPelajaran();
+onMounted(async () => {
+  // Panggil data peserta dulu agar counter up-to-date saat sesi diproses
   if (classId.value) {
-    fetchPesertaKelas();
+    await fetchPesertaKelas();
   }
+  await fetchSesiPelajaran();
 });
 
 watch(
   () => [route.query.class_id, route.query.classId, route.query.id],
-  () => {
-    classId.value = route.query.class_id || route.query.classId || route.query.id || "";
-    fetchSesiPelajaran();
+  async () => {
+    classId.value = route.query.classId || route.query.class_id || route.query.id || "";
     if (classId.value) {
-      fetchPesertaKelas();
+      await fetchPesertaKelas();
     }
+    await fetchSesiPelajaran();
   },
   { deep: true }
 );
@@ -250,12 +249,10 @@ watch(search, async () => {
   await fetchSesiPelajaran();
 });
 
-// Penentuan aksi klik tombol berdasarkan label status UI hasil filter
 const handleSesiClick = (sesi) => {
   if (!sesi) return;
 
   if (sesi.uiStatus === 'Berjalan' || sesi.uiStatus === 'Selesai') {
-    // Jika Berjalan / Selesai -> Langsung arahkan masuk ke halaman detail sesi (Lihat Sesi)
     router.push({
       path: "/detail-sesi",
       query: {
@@ -267,7 +264,6 @@ const handleSesiClick = (sesi) => {
       }
     });
   } else {
-    // Jika Terjadwal -> Tampilkan Pop-Up pengisian Topik (Buka Sesi)
     selectedJadwal.value = {
       id: sesi.id,
       mataKuliah: infoKelas.value.mataKuliah,
@@ -278,7 +274,6 @@ const handleSesiClick = (sesi) => {
   }
 };
 
-// Eksekusi Buka Sesi dari dalam Modal Pop-up
 const bukaSesi = async () => {
   if (!topikKelas.value.trim()) {
     alert("Mohon masukkan topik kelas terlebih dahulu!");
@@ -288,7 +283,7 @@ const bukaSesi = async () => {
   try {
     const payload = { 
       topic: topikKelas.value,
-      status: "opened" // Mengubah status menjadi opened ke back-end
+      status: "opened"
     };
 
     const res = await updateJadwal(selectedJadwal.value.id, payload);
@@ -297,7 +292,6 @@ const bukaSesi = async () => {
       showModal.value = false;
       topikKelas.value = "";
 
-      // Redirect langsung ke detail-sesi setelah berhasil menyimpan
       router.push({
         path: "/detail-sesi",
         query: {
@@ -431,7 +425,7 @@ const lihatNilai = () => {
           <p>Program Studi</p><p>{{ infoKelas.prodi }}</p>
           <p>Hari</p><p>{{ infoKelas.hari }}</p>
           <p>Semester</p><p>{{ infoKelas.semester }}</p>
-           <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
+          <p>Waktu</p><p>{{ infoKelas.waktu }}</p>
           <p>SKS</p><p>{{ infoKelas.sks }}</p>
           <p>Tahun Academic</p><p>{{ infoKelas.tahunAkademik }}</p>
         </div>
@@ -505,11 +499,10 @@ const lihatNilai = () => {
         </div>
 
         <div class="bg-white p-4 rounded shadow">
-          <h2 class="font-semibold text-[14px] mb-2">Jumlah {{  }} Peserta</h2>
+          <h2 class="font-semibold text-[14px] mb-2">Jumlah {{ totalMahasiswa }} Peserta</h2>
           <div class="flex gap-4 mb-3">
             <input v-model="searchPeserta" type="text" placeholder="Search"
               class="w-full border rounded-[6px] px-3 py-2 text-[11px] outline-none" />
-            <!-- <button class="bg-green-600 text-white px-4 py-2 text-[12px] rounded-[6px] font-semibold">Cari</button> -->
           </div>
           <div class="space-y-2">
             <div v-for="p in filteredPeserta" :key="p.id" class="flex items-center gap-4">
