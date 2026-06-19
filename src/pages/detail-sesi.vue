@@ -39,6 +39,7 @@ const searchMahasiswa = ref("");
 const daftarMahasiswa = ref([]);
 const showQrModal = ref(false);
 const sudahAdaPresensi = ref(false);
+const statusSesi = ref(""); // State untuk menyimpan status dari backend (open/closed)
 
 const isLibraryForTugas = ref(false); 
 
@@ -115,18 +116,25 @@ const fetchMateri = async () => {
       ? dataSesiRaw.find(sesi => String(sesi.id) === String(currentSesiId))
       : dataSesiRaw;
 
-    if (sesiAktif && sesiAktif.learning_materials) {
-      materiList.value = sesiAktif.learning_materials.map(material => ({
-        id: material.id,
-        title: "Dokumen Materi", 
-        description: `Diunggah pada: ${new Date(material.uploaded_at).toLocaleDateString('id-ID')}`,
-        files: [
-          {
-            uuid: material.id,
-            name: material.original_file_name || "File Materi"
-          }
-        ]
-      }));
+    if (sesiAktif) {
+      // Simpan status sesi aktif ke reactive state
+      statusSesi.value = sesiAktif.status || "";
+
+      if (sesiAktif.learning_materials) {
+        materiList.value = sesiAktif.learning_materials.map(material => ({
+          id: material.id,
+          title: "Dokumen Materi", 
+          description: `Diunggah pada: ${new Date(material.uploaded_at).toLocaleDateString('id-ID')}`,
+          files: [
+            {
+              uuid: material.id,
+              name: material.original_file_name || "File Materi"
+            }
+          ]
+        }));
+      } else {
+        materiList.value = [];
+      }
     } else {
       materiList.value = [];
     }
@@ -376,7 +384,6 @@ const loadMahasiswa = async () => {
         }];
       });
     }
-    console.log("🚀 DAFTAR MAHASISWA AWAL:", daftarMahasiswa.value);
   } catch (error) {
     console.error("Gagal load mahasiswa:", error);
   }
@@ -392,7 +399,6 @@ const loadPresensi = async () => {
       const statusMap = { hadir: "H", izin: "I", sakit: "S", alpha: "A" };
       
       res.mahasiswa.forEach((item) => {
-        // Pemetaan String ID ketat guna mencocokkan data server & client
         const mahasiswa = daftarMahasiswa.value.find((m) => 
           String(m.id) === String(item.detail_id) || 
           String(m.id) === String(item.mahasiswa_id) || 
@@ -402,7 +408,6 @@ const loadPresensi = async () => {
           mahasiswa.status = statusMap[item.status?.toLowerCase()] || "A";
         }
       });
-      console.log("🔄 STATE PRESENSI SERVER SINKRON KE UI");
     } else {
       sudahAdaPresensi.value = false; 
     }
@@ -414,7 +419,7 @@ const loadPresensi = async () => {
 onMounted(async () => {
   await loadMahasiswa();
   await loadPresensi();
-  await fetchMateri();
+  await fetchMateri(); // Mengambil data materi sekaligus set statusSesi
   await fetchTugas();
 });
 
@@ -427,6 +432,11 @@ const filteredMahasiswa = computed(() => {
 });
 
 const ubahStatus = (mahasiswa, statusBaru) => {
+  // Cegah perubahan presensi jika sesi sudah ditutup
+  if (statusSesi.value.toLowerCase() === 'closed' || statusSesi.value.toLowerCase() === 'selesai') {
+    alert("Sesi sudah selesai, data presensi tidak dapat diubah.");
+    return;
+  }
   mahasiswa.status = statusBaru;
 };
 
@@ -436,14 +446,11 @@ const simpanPresensi = async () => {
 
     if (!sudahAdaPresensi.value) {
       console.log("=== ISI PRESENSI PERTAMA KALI (POST KEMUDIAN UPDATE) ===");
-      
       const payloadTambah = {
         pengampu_id: pengampuId || "019eb0e3-ef81-7ade-b1bf-43fcc47ea03f",
         sesi_id: route.query.id,
       };
-
       await postPresensiMahasiswa(payloadTambah);
-      
       sudahAdaPresensi.value = true;
     }
 
@@ -457,11 +464,8 @@ const simpanPresensi = async () => {
       detail: detailPayload
     };
 
-    console.log("Mengirim data presensi ke server:", payloadUpdate);
-
     await updatePresensiMahasiswa(payloadUpdate);
     alert("Data presensi mahasiswa berhasil disimpan ke database!");
-
     await loadPresensi();
 
   } catch (error) {
@@ -484,6 +488,7 @@ const tutupSesi = async () => {
 
     if (res.status === 200 || res.data?.success) {
       alert("Sesi perkuliahan berhasil ditutup!");
+      statusSesi.value = "closed"; // Perbarui local state agar UI langsung berubah tanpa pindah halaman
       router.push({
         path: "/detail-kelas",
         query: { 
@@ -504,8 +509,6 @@ const tutupSesi = async () => {
     <div class="flex justify-between items-start mb-6">
         <div>
             <p class="text-[12px] mb-2">
-                <RouterLink to="/Dashboard" class="hover:underline">Dashboard</RouterLink>
-                <span class="mx-2 text-gr">&gt;</span>
                 <RouterLink to="/Kelas" class="hover:underline">Kelas</RouterLink>
                 <span class="mx-2 text-gr">&gt;</span>
                 <RouterLink :to="{ path: '/detail-kelas', query: { classId: route.query.class_id || route.query.classId, kode: route.query.kode, pengampuId: route.query.pengampuId || route.query.pengampu_id} }" class="hover:underline">Detail Kelas</RouterLink>
@@ -519,8 +522,21 @@ const tutupSesi = async () => {
                 <Search class="w-5 h-5 text-gray-400" />
                 <input v-model="searchMahasiswa" type="text" placeholder="Cari Mahasiswa..." class="w-full outline-none text-[12px]"/>
             </div>
-            <button @click="tutupSesi" class="hover:bg-red-400 bg-red-500 text-white px-4 py-2 rounded-[4px] text-[12px] font-semibold">
-                Tutup Sesi
+            
+            <!-- KONDISI TOMBOL AKHIRI SESI -->
+            <button 
+              v-if="statusSesi.toLowerCase() === 'closed' || statusSesi.toLowerCase() === 'selesai'" 
+              disabled
+              class="bg-gray-400 text-white px-4 py-2 rounded-[4px] text-[12px] font-semibold cursor-not-allowed"
+            >
+              Sesi Selesai
+            </button>
+            <button 
+              v-else 
+              @click="tutupSesi" 
+              class="hover:bg-red-400 bg-red-500 text-white px-4 py-2 rounded-[4px] text-[12px] font-semibold"
+            >
+              Tutup Sesi
             </button>
         </div>
     </div>
@@ -600,6 +616,7 @@ const tutupSesi = async () => {
         </div>
     </div>
 
+    <!-- Submission Modal -->
     <div v-if="showSubmissionModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-[10px] p-5 w-full max-w-2xl shadow-xl space-y-4 text-[12px]">
         <div class="flex justify-between items-center border-b pb-3">
@@ -669,9 +686,18 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Presensi Section -->
     <div class="mt-3">
         <h2 class="text-[15px] font-semibold mb-3">Daftar Presensi Mahasiswa</h2>
-        <button @click="simpanPresensi" class="bg-green-600 text-white text-[12px] px-4 py-2 rounded-md mb-4 hover:bg-green-500">Simpan Presensi</button>
+        
+        <!-- Sembunyikan Tombol Simpan Presensi jika status sesi closed / selesai -->
+        <button 
+          v-if="statusSesi.toLowerCase() !== 'closed' && statusSesi.toLowerCase() !== 'selesai'"
+          @click="simpanPresensi" 
+          class="bg-green-600 text-white text-[12px] px-4 py-2 rounded-md mb-4 hover:bg-green-500"
+        >
+          Simpan Presensi
+        </button>
         
         <div v-for="mahasiswa in filteredMahasiswa" :key="mahasiswa.id" class="bg-white shadow rounded-[4px] px-4 py-3 flex items-center justify-between mb-1.5 hover:bg-gray-50 transition">
             <div class="flex items-center gap-4 w-[40%]">
@@ -694,6 +720,7 @@ const tutupSesi = async () => {
         </div>
     </div>
 
+    <!-- Tugas Modal -->
     <div v-if="showTugasModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-[10px] p-5 w-full max-w-md shadow-lg space-y-4 text-[12px]">
         <div class="flex justify-between items-center border-b pb-2">
@@ -732,6 +759,7 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Materi Modal -->
     <div v-if="showMateriModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div class="bg-white w-[420px] rounded-[10px] p-6 relative shadow-lg">
         <button @click="showMateriModal = false" class="absolute top-3 right-4 text-[22px]">×</button>
@@ -758,6 +786,7 @@ const tutupSesi = async () => {
       </div>
     </div>
 
+    <!-- Media Library Modal -->
     <div v-if="showFileLibraryModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
       <div class="bg-white w-[520px] rounded-[10px] p-6 relative shadow-lg">
         <button @click="showFileLibraryModal = false" class="absolute top-3 right-4 text-[22px]">×</button>
