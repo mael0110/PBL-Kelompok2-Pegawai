@@ -119,24 +119,41 @@ export const nilaiService = () => {
     }
   };
 
-  // 🔥 BARU: API Import / Upload File Excel Nilai
-  const uploadTemplateNilai = async (formData) => {
+const uploadTemplateNilai = async (formData) => {
+  try {
+    const token = localStorage.getItem("token");
+    const response = await axios.post(
+      "https://api-pegawai-4a.akufarish.my.id:1234/api/grade-imports",
+      formData,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data",
+          Accept: "application/json"
+        }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error di uploadTemplateNilai:", error.response?.data || error);
+    throw error;
+  }
+};
+
+  const getAllNilai = async (classId, courseCode) => {
     try {
       const token = localStorage.getItem("token");
-      const response = await axios.post(
-        "https://api-pegawai-4a.akufarish.my.id:1234/api/grade-imports",
-        formData,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "multipart/form-data",
-            Accept: "application/json"
-          }
+      const response = await axios.get(`https://api-pegawai-4a.akufarish.my.id:1234/api/classes/${classId}/${courseCode}/grades`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          Accept: "application/json"
         }
-      );
+      });
+      console.log("nilai-nilai mhs ", response.data)
       return response.data;
     } catch (error) {
-      console.error("Error di uploadTemplateNilai:", error.response?.data || error);
+      console.error("Error di getAllNilai:", error.response?.data || error);
       throw error;
     }
   };
@@ -146,6 +163,7 @@ export const nilaiService = () => {
     createAturanNilai,
     updateAturanNilai,
     downloadTemplateNilai,
-    uploadTemplateNilai // 🔥 Daftarkan fungsinya di sini
+    uploadTemplateNilai,
+    getAllNilai
   };
 };

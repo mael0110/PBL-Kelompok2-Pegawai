@@ -216,7 +216,7 @@ onMounted(async () => {
         <div v-else>
             <table class="w-full text-center border-collapse text-[13px]">
                 <thead>
-                    <tr class="bg-blue-200  font-semibold border-b border-gray-200">
+                    <tr class="bg-blue-100  font-semibold border-b border-gray-200">
                         <th class="py-3 border-r border-gray-200 w-1/2">Komponen Penilaian</th>
                         <th class="py-3">Bobot (%)</th>
                     </tr>

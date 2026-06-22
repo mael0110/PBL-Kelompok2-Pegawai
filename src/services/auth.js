@@ -55,7 +55,7 @@ export function authService() {
   async function getProfile() {
     const token = localStorage.getItem("token");
     
-    const defaultEmployeeId = "019ece8d-2ada-703a-81d6-d07c4b239957";
+    const defaultEmployeeId = "019eea91-3220-70da-820b-b7aaab9d6a13";
 
     const res = await axios.get(
       `https://api-pegawai-4a.akufarish.my.id:1234/api/employees/${defaultEmployeeId}`, 

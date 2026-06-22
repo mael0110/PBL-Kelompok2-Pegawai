@@ -8,7 +8,7 @@ import { profileStore } from "../assets/profile";
 const { getProfile, updateEmployee } = authService();
 
 // 🟢 Menggunakan employeeId default/initial pilihanmu
-const employeeId = ref("019ece8d-2ada-703a-81d6-d07c4b239957");
+const employeeId = ref("019eea91-3220-70da-820b-b7aaab9d6a13");
 
 // state profile dengan property penampung asli dari relasi objek API Anda
 const profile = ref({

@@ -5,12 +5,12 @@ import { Upload, Download } from "lucide-vue-next";
 import { nilaiService } from "../services/nilai";
 import { useRoute, useRouter, RouterLink } from "vue-router";
 import { kelasService } from "../services/kelas";
+import axios from "axios";
 
 const route = useRoute();
 const router = useRouter();
 
-// 🔥 BARU: Destruktur fungsi uploadTemplateNilai
-const { downloadTemplateNilai, uploadTemplateNilai } = nilaiService(); 
+const { downloadTemplateNilai, uploadTemplateNilai, getAllNilai } = nilaiService(); 
 const { getKelasByProdi, getMahasiswaKelas } = kelasService();
 
 const mataKuliahKode = computed(() => route.query.kode || route.params.kode || "");
@@ -62,16 +62,69 @@ const fetchInfoKelasMaster = async () => {
 };
 
 const fetchMahasiswaDariKelas = async () => {
-  if (!classId.value) return;
+  if (!classId.value || !mataKuliahKode.value) return;
   loading.value = true;
   try {
-    const res = await getMahasiswaKelas(classId.value);
-    console.log("RESPONSE ASLI DARI API MAHASISWA KELAS:", res);
+    const token = localStorage.getItem("token");
 
-    const dataMentah = Array.isArray(res) ? res : (res?.data || []);
-    
-    if (dataMentah && dataMentah.length > 0) {
-      nilaiData.value = dataMentah.map(m => {
+    // 1. Ambil data list mahasiswa & data nilai real dari Kelompok 1
+    const [resMahasiswa, resNilai] = await Promise.all([
+      getMahasiswaKelas(classId.value),
+      getAllNilai(classId.value, mataKuliahKode.value).catch(err => {
+        console.error("⚠️ Gagal mengambil data nilai Kelompok 1:", err);
+        return null;
+      })
+    ]);
+
+    // 2. Ambil data Grade dari API KHS Kelompok 2 dengan Looping Otomatis Semua Halaman
+    let listKHSReal = [];
+    let currentPage = 1;
+    let hasNextPage = true;
+
+    console.log("🔄 Memulai pengambilan data KHS berantai dari Kelompok 2...");
+
+    while (hasNextPage) {
+      try {
+        const resKHS = await axios.get(`https://be.karlearn.site/api/khs?page=${currentPage}&per_page=10`, {
+          headers: { 
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json"
+          }
+        });
+
+        const dataHalamanIni = resKHS?.data?.data || [];
+        const infoPagination = resKHS?.data?.pagination || resKHS?.data?.data?.pagination;
+
+        if (Array.isArray(dataHalamanIni) && dataHalamanIni.length > 0) {
+          // Gabungkan data yang didapat dari halaman ini ke dalam array penampung utama
+          listKHSReal = [...listKHSReal, ...dataHalamanIni];
+          
+          // Cek total_pages dari backend mereka untuk tahu kapan harus berhenti
+          const totalPages = infoPagination?.total_pages || infoPagination?.total_page || 10; 
+          
+          if (currentPage >= totalPages) {
+            hasNextPage = false;
+          } else {
+            currentPage++;
+          }
+        } else {
+          hasNextPage = false; // Berhenti jika response array kosong
+        }
+      } catch (errKHS) {
+        console.error(`⚠️ Gagal mengambil KHS Halaman ${currentPage}:`, errKHS);
+        hasNextPage = false; // Stop loop jika terjadi error di tengah jalan
+      }
+    }
+
+    console.log(`✨ Selesai! Berhasil mengumpulkan ${listKHSReal.length} data KHS dari Kelompok 2.`);
+    console.log("RESPONSE ASLI MAHASISWA KELAS:", resMahasiswa);
+    console.log("RESPONSE ASLI DATA NILAI REAL:", resNilai);
+
+    const dataMahasiswaMentah = Array.isArray(resMahasiswa) ? resMahasiswa : (resMahasiswa?.data || []);
+    const dataNilaiReal = resNilai?.data || [];
+
+    if (dataMahasiswaMentah && dataMahasiswaMentah.length > 0) {
+      nilaiData.value = dataMahasiswaMentah.map(m => {
         let studentObj = {};
         
         if (m.mahasiswa && Array.isArray(m.mahasiswa) && m.mahasiswa.length > 0) {
@@ -82,24 +135,54 @@ const fetchMahasiswaDariKelas = async () => {
           studentObj = m;
         }
 
+        const currentStudentId = String(studentObj.mahasiswa_id || studentObj.id || m.id || '');
+        const currentStudentName = String(studentObj.name || studentObj.nama || m.nama || '').trim().toLowerCase();
+
+        // Hubungkan dengan nilai angka Tugas, UTS, UAS dari Kelompok 1
+        const nilaiCocok = dataNilaiReal.find(n => String(n.student_id || n.id) === currentStudentId);
+
+        // Cari baris mahasiswa di list KHS gabungan menggunakan pencocokan NAMA
+        const khsMahasiswa = listKHSReal.find(k => 
+          String(k.mahasiswa_name || '').trim().toLowerCase() === currentStudentName
+        );
+        
+        let gradeResmiBackend = "-";
+        
+        // Jika data KHS ditemukan, cari grade berdasarkan kode mata kuliah yang cocok
+        if (khsMahasiswa && Array.isArray(khsMahasiswa.nilai)) {
+          const matkulCocok = khsMahasiswa.nilai.find(n => 
+            String(n.kode_mk || n.kode_course || '').trim().toLowerCase() === String(mataKuliahKode.value).trim().toLowerCase()
+          );
+          if (matkulCocok) {
+            gradeResmiBackend = matkulCocok.grade || "-";
+          }
+        }
+
+        const assignmentScore = nilaiCocok?.assignment_score ?? nilaiCocok?.assignment ?? 0;
+        const utsScore = nilaiCocok?.uts_score ?? nilaiCocok?.uts ?? 0;
+        const uasScore = nilaiCocok?.uas_score ?? nilaiCocok?.uas ?? 0;
+
+        const nilaiAkhirSistem = nilaiCocok?.final_score ?? nilaiCocok?.final_grade;
+        const hitungNilaiAkhir = nilaiAkhirSistem ? Number(nilaiAkhirSistem) : Math.round((Number(assignmentScore) + Number(utsScore) + Number(uasScore)) / 3);
+
         return {
-          id: String(studentObj.mahasiswa_id || studentObj.id || m.id || ''),
+          id: currentStudentId,
           nim: String(studentObj.nim || ''), 
           nama: String(studentObj.name || studentObj.nama || ''),
-          tugas: 0,
-          uts: 0,
-          uas: 0,
-          nilaiAkhir: 0,
-          grade: '-'
+          tugas: Number(assignmentScore),
+          uts: Number(utsScore),
+          uas: Number(uasScore),
+          nilaiAkhir: hitungNilaiAkhir,
+          grade: gradeResmiBackend
         };
       });
 
-      console.log("🔥 HASIL MAP AKHIR UNTUK TABEL & TEMPLATE:", nilaiData.value);
+      console.log("🔥 HASIL GABUNGAN AKHIR (ALL PAGES):", nilaiData.value);
     } else {
       nilaiData.value = [];
     }
   } catch (err) {
-    console.error("❌ Gagal mengambil data mahasiswa kelas:", err);
+    console.error("❌ Gagal merangkai data gabungan:", err);
     nilaiData.value = [];
   } finally {
     loading.value = false;
@@ -115,7 +198,6 @@ const handleFileChange = (e) => {
 const uploadNilai = async () => {
   if (!file.value) return;
 
-  // Validasi ukuran file (Maksimal 2048 KB / 2 MB)
   const maxSizeInBytes = 2048 * 1024;
   if (file.value.size > maxSizeInBytes) {
     alert("Gagal: Ukuran file tidak boleh lebih dari 2048 KB (2 MB).");
@@ -124,29 +206,22 @@ const uploadNilai = async () => {
 
   loading.value = true;
   try {
-    // 1. Ambil teks kode dasar
     const baseCode = String(mataKuliahKode.value || route.query.kode || route.params.kode || "MK").trim();
-    
-    // 2. 🔥 BERSIHKAN TOTAL: Hapus semua spasi di tengah maupun di ujung teks agar tidak dihitung karakter tambahan
     const strictCleanCode = baseCode.replace(/\s+/g, '');
-
-    // 3. Potong maksimal 10 karakter untuk jaga-jaga
     const finalCourseCode = strictCleanCode.substring(0, 10);
 
-    // Bersihkan nama matkul dan kelas
     const cleanCourseName = String(route.query.namaMatkul || namaMataKuliah.value || "Mata Kuliah").trim();
     const cleanClassName = String(route.query.namaKelas || namaKelas.value || "Kelas").trim();
     const cleanClassId = String(classId.value || "").trim();
 
-    // Siapkan FormData
     const formData = new FormData();
     formData.append("file", file.value);
     formData.append("class_id", cleanClassId);
     formData.append("class_name", cleanClassName);
-    formData.append("course_code", finalCourseCode); // Dijamin bersih tanpa spasi hantu ("C0320101")
+    formData.append("course_code", finalCourseCode); 
     formData.append("course_name", cleanCourseName);
 
-    console.log("🚀 MENGIRIM FORM DATA STERIL:", {
+    console.log("MENGIRIM FORM DATA STERIL KE KELOMPOK 1:", {
       class_id: cleanClassId,
       class_name: cleanClassName,
       course_code: finalCourseCode,
@@ -156,21 +231,50 @@ const uploadNilai = async () => {
     const res = await uploadTemplateNilai(formData);
 
     if (res && (res.success || res.code === 200)) {
-      alert("File excel nilai berhasil di-upload!");
-      file.value = null; // Reset input file
-      await fetchMahasiswaDariKelas(); // Refresh tabel nilai
+      alert("File excel nilai berhasil di-upload ke sistem utama!");
+      file.value = null; 
+      
+      await fetchMahasiswaDariKelas(); 
+
+      if (nilaiData.value && nilaiData.value.length > 0) {
+        console.log(`🔄 Memulai sinkronisasi massal ${nilaiData.value.length} data ke API KHS Kelompok 2...`);
+        const token = localStorage.getItem("token");
+
+        const promisesKHS = nilaiData.value.map((mhs) => {
+          const payloadKHS = {
+            mahasiswa_id: mhs.id,
+            pengampu_id: pengampuId.value,
+            total_nilai: Number(mhs.nilaiAkhir || 0)
+          };
+
+          return axios.post(
+            "https://be.karlearn.site/api/khs/nilai",
+            payloadKHS,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+                Accept: "application/json"
+              }
+            }
+          ).catch(err => {
+            console.error(`⚠️ Gagal mengirim data KHS mahasiswa ${mhs.nama}:`, err.response?.data || err.message);
+            return null;
+          });
+        });
+
+        await Promise.all(promisesKHS);
+        console.log("Semua rangkaian sinkronisasi data KHS selesai diproses!");
+        alert("Sinkronisasi berkas nilai ke KHS Mahasiswa berhasil diselesaikan!");
+      }
+
     } else {
       alert(res?.message || "Gagal mengunggah template excel nilai.");
     }
   } catch (err) {
-    console.error("❌ Gagal upload nilai:", err);
+    console.error("Gagal upload nilai:", err);
     const errorData = err.response?.data;
     const pesanError = errorData?.message || "Terjadi kesalahan jaringan atau validasi sistem.";
-    
-    if (errorData?.errors) {
-      console.log("🔍 Detail Eror Validasi Backend:", errorData.errors);
-    }
-    
     alert("Gagal Upload: " + pesanError);
   } finally {
     loading.value = false;
@@ -187,7 +291,6 @@ const handleDownloadTemplate = async () => {
   try {
     let rawCode = mataKuliahKode.value || route.query.kode || "MK-001";
     if (rawCode.length > 10) {
-      console.warn("Kode matkul dipotong karena melebihi batas maksimal 10 karakter.");
       rawCode = rawCode.substring(0, 10);
     }
 
@@ -274,7 +377,7 @@ onMounted(async () => {
           <button @click="handleDownloadTemplate" :disabled="loading || nilaiData.length === 0" class="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-800 rounded text-[13px] font-medium hover:bg-blue-50 disabled:opacity-50">
             <Download class="w-4 h-4" /> Download Template
           </button>
-          <button @click="file = null" :disabled="loading || !file" class="px-4 py-2 bg-red-500 rounded text-[13px] text-white text-slate-700 hover:bg-red-400 disabled:opacity-50">Batal</button>
+          <button @click="file = null" :disabled="loading || !file" class="px-4 py-2 bg-red-500 rounded text-[13px] text-white hover:bg-red-400 disabled:opacity-50">Batal</button>
           <button @click="uploadNilai" :disabled="loading || !file" class="px-4 py-2 bg-blue-900 text-white rounded text-[13px] hover:bg-blue-800 disabled:opacity-50">
             {{ loading ? 'Mengupload...' : 'Upload' }}
           </button>
@@ -302,13 +405,13 @@ onMounted(async () => {
                 </td>
             </tr>
             <tr v-else v-for="(item, i) in nilaiData" :key="i" class="border-b border-gray-100 hover:bg-gray-50/50">
-              <td class="p-3 text-left font-medium">{{ item.nim }}</td>
+              <td class="p-3 text-left ">{{ item.nim }}</td>
               <td class="p-3 text-left">{{ item.nama }}</td>
               <td class="p-3 text-center">{{ item.tugas }}</td>
               <td class="p-3 text-center">{{ item.uts }}</td>
               <td class="p-3 text-center">{{ item.uas }}</td>
-              <td class="p-3 text-center font-semibold text-blue-900">{{ item.nilaiAkhir }}</td>
-              <td class="p-3 text-center font-bold text-emerald-700">{{ item.grade }}</td>
+              <td class="p-3 text-center ">{{ item.nilaiAkhir }}</td>
+              <td class="p-3 text-center ">{{ item.grade }}</td>
             </tr>
           </tbody>
         </table>

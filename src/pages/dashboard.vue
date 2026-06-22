@@ -9,10 +9,8 @@ import { kelasService } from "../services/kelas";
 const router = useRouter();
 
 const { presensiDosen } = presensiService();
-// 🟢 Ditambahkan updateJadwal untuk kebutuhan aktivasi sesi via popup
 const { getAllSesiDosen, updateJadwal } = kelasService();
 
-// Tanggal hari ini
 const today = new Date();
 
 const tanggalHariIni = today.toLocaleDateString("id-ID", {
@@ -259,10 +257,16 @@ const todayKey = new Date().toISOString().split("T")[0];
 
 const submitPresensi = async () => {
   if (!statusPresensi.value) return;
+
   loadingPresensi.value = true;
 
   try {
-    const payload = { status: statusPresensi.value };
+    const payload = {
+      status: statusPresensi.value.trim().toLowerCase()
+    };
+
+    console.log("SEND PAYLOAD:", payload);
+
     const res = await presensiDosen(payload);
 
     if (res?.success || res) {
@@ -270,9 +274,11 @@ const submitPresensi = async () => {
       localStorage.setItem("presensi_dosen_hari_ini", todayKey);
       showPresensiModal.value = false;
       statusPresensi.value = "";
+
+      await fetchSesiKalender();
     }
   } catch (error) {
-    console.error("Error submit presensi:", error);
+    console.error("Error submit presensi admin:", error);
   } finally {
     loadingPresensi.value = false;
   }

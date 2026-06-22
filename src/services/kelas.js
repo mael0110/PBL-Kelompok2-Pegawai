@@ -346,7 +346,7 @@ export function kelasService() {
     meta,
     getSesiPengampu, 
     getKelas, 
-    getKelasByProdi, // Daftarkan fungsi baru di sini agar bisa dipanggil di .vue
+    getKelasByProdi, 
     getDetailKelas, 
     getMahasiswaKelas,
     postPresensiMahasiswa,
