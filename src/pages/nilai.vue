@@ -24,6 +24,18 @@ const file = ref(null);
 const loading = ref(false);
 const nilaiData = ref([]); 
 
+// --- STATE & FUNGSI POP-UP REPLACEMENT UNTUK ALERT ---
+const showToast = ref(false);
+const toastMessage = ref("");
+const toastType = ref("error");
+
+const pemicuToast = (message, type = "error") => {
+  toastMessage.value = message;
+  toastType.value = type;
+  showToast.value = true;
+  setTimeout(() => { showToast.value = false; }, 3000);
+};
+
 const fetchInfoKelasMaster = async () => {
   try {
     const prodiParam = "teknik-informatika";
@@ -67,7 +79,6 @@ const fetchMahasiswaDariKelas = async () => {
   try {
     const token = localStorage.getItem("token");
 
-    // 1. Ambil data list mahasiswa & data nilai real dari Kelompok 1
     const [resMahasiswa, resNilai] = await Promise.all([
       getMahasiswaKelas(classId.value),
       getAllNilai(classId.value, mataKuliahKode.value).catch(err => {
@@ -76,12 +87,9 @@ const fetchMahasiswaDariKelas = async () => {
       })
     ]);
 
-    // 2. Ambil data Grade dari API KHS Kelompok 2 dengan Looping Otomatis Semua Halaman
     let listKHSReal = [];
     let currentPage = 1;
     let hasNextPage = true;
-
-    console.log("🔄 Memulai pengambilan data KHS berantai dari Kelompok 2...");
 
     while (hasNextPage) {
       try {
@@ -96,10 +104,7 @@ const fetchMahasiswaDariKelas = async () => {
         const infoPagination = resKHS?.data?.pagination || resKHS?.data?.data?.pagination;
 
         if (Array.isArray(dataHalamanIni) && dataHalamanIni.length > 0) {
-          // Gabungkan data yang didapat dari halaman ini ke dalam array penampung utama
           listKHSReal = [...listKHSReal, ...dataHalamanIni];
-          
-          // Cek total_pages dari backend mereka untuk tahu kapan harus berhenti
           const totalPages = infoPagination?.total_pages || infoPagination?.total_page || 10; 
           
           if (currentPage >= totalPages) {
@@ -108,17 +113,13 @@ const fetchMahasiswaDariKelas = async () => {
             currentPage++;
           }
         } else {
-          hasNextPage = false; // Berhenti jika response array kosong
+          hasNextPage = false; 
         }
       } catch (errKHS) {
         console.error(`⚠️ Gagal mengambil KHS Halaman ${currentPage}:`, errKHS);
-        hasNextPage = false; // Stop loop jika terjadi error di tengah jalan
+        hasNextPage = false; 
       }
     }
-
-    console.log(`✨ Selesai! Berhasil mengumpulkan ${listKHSReal.length} data KHS dari Kelompok 2.`);
-    console.log("RESPONSE ASLI MAHASISWA KELAS:", resMahasiswa);
-    console.log("RESPONSE ASLI DATA NILAI REAL:", resNilai);
 
     const dataMahasiswaMentah = Array.isArray(resMahasiswa) ? resMahasiswa : (resMahasiswa?.data || []);
     const dataNilaiReal = resNilai?.data || [];
@@ -138,17 +139,13 @@ const fetchMahasiswaDariKelas = async () => {
         const currentStudentId = String(studentObj.mahasiswa_id || studentObj.id || m.id || '');
         const currentStudentName = String(studentObj.name || studentObj.nama || m.nama || '').trim().toLowerCase();
 
-        // Hubungkan dengan nilai angka Tugas, UTS, UAS dari Kelompok 1
         const nilaiCocok = dataNilaiReal.find(n => String(n.student_id || n.id) === currentStudentId);
-
-        // Cari baris mahasiswa di list KHS gabungan menggunakan pencocokan NAMA
         const khsMahasiswa = listKHSReal.find(k => 
           String(k.mahasiswa_name || '').trim().toLowerCase() === currentStudentName
         );
         
         let gradeResmiBackend = "-";
         
-        // Jika data KHS ditemukan, cari grade berdasarkan kode mata kuliah yang cocok
         if (khsMahasiswa && Array.isArray(khsMahasiswa.nilai)) {
           const matkulCocok = khsMahasiswa.nilai.find(n => 
             String(n.kode_mk || n.kode_course || '').trim().toLowerCase() === String(mataKuliahKode.value).trim().toLowerCase()
@@ -176,8 +173,6 @@ const fetchMahasiswaDariKelas = async () => {
           grade: gradeResmiBackend
         };
       });
-
-      console.log("🔥 HASIL GABUNGAN AKHIR (ALL PAGES):", nilaiData.value);
     } else {
       nilaiData.value = [];
     }
@@ -200,7 +195,7 @@ const uploadNilai = async () => {
 
   const maxSizeInBytes = 2048 * 1024;
   if (file.value.size > maxSizeInBytes) {
-    alert("Gagal: Ukuran file tidak boleh lebih dari 2048 KB (2 MB).");
+    pemicuToast("Gagal: Ukuran file tidak boleh lebih dari 2048 KB (2 MB).", "error");
     return;
   }
 
@@ -221,23 +216,15 @@ const uploadNilai = async () => {
     formData.append("course_code", finalCourseCode); 
     formData.append("course_name", cleanCourseName);
 
-    console.log("MENGIRIM FORM DATA STERIL KE KELOMPOK 1:", {
-      class_id: cleanClassId,
-      class_name: cleanClassName,
-      course_code: finalCourseCode,
-      course_name: cleanCourseName
-    });
-
     const res = await uploadTemplateNilai(formData);
 
     if (res && (res.success || res.code === 200)) {
-      alert("File excel nilai berhasil di-upload ke sistem utama!");
+      pemicuToast("File excel nilai berhasil di-upload ke sistem utama!", "success");
       file.value = null; 
       
       await fetchMahasiswaDariKelas(); 
 
       if (nilaiData.value && nilaiData.value.length > 0) {
-        console.log(`🔄 Memulai sinkronisasi massal ${nilaiData.value.length} data ke API KHS Kelompok 2...`);
         const token = localStorage.getItem("token");
 
         const promisesKHS = nilaiData.value.map((mhs) => {
@@ -264,18 +251,17 @@ const uploadNilai = async () => {
         });
 
         await Promise.all(promisesKHS);
-        console.log("Semua rangkaian sinkronisasi data KHS selesai diproses!");
-        alert("Sinkronisasi berkas nilai ke KHS Mahasiswa berhasil diselesaikan!");
+        pemicuToast("Sinkronisasi berkas nilai ke KHS Mahasiswa berhasil diselesaikan!", "success");
       }
 
     } else {
-      alert(res?.message || "Gagal mengunggah template excel nilai.");
+      pemicuToast(res?.message || "Gagal mengunggah template excel nilai.", "error");
     }
   } catch (err) {
     console.error("Gagal upload nilai:", err);
     const errorData = err.response?.data;
     const pesanError = errorData?.message || "Terjadi kesalahan jaringan atau validasi sistem.";
-    alert("Gagal Upload: " + pesanError);
+    pemicuToast("Gagal Upload: " + pesanError, "error");
   } finally {
     loading.value = false;
   }
@@ -283,7 +269,7 @@ const uploadNilai = async () => {
 
 const handleDownloadTemplate = async () => {
   if (nilaiData.value.length === 0) {
-    alert("Daftar mahasiswa kosong. Tidak bisa mendownload template.");
+    pemicuToast("Daftar mahasiswa kosong. Tidak bisa mendownload template.", "warning");
     return;
   }
 
@@ -306,11 +292,11 @@ const handleDownloadTemplate = async () => {
       }))
     };
 
-    console.log("PAYLOAD DIKIRIM KE EXPORT API:", payload);
     await downloadTemplateNilai(payload);
-    
+    pemicuToast("Template nilai berhasil diunduh!", "success");
   } catch (error) {
     console.error("Gagal mendownload template:", error);
+    pemicuToast("Gagal mengunduh template.", "error");
   } finally {
     loading.value = false;
   }
@@ -331,9 +317,31 @@ onMounted(async () => {
 
 <template>
   <adminLayout>      
+    <transition
+      enter-active-class="transform ease-out duration-300 transition"
+      enter-from-class="translate-y-[-20px] opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="showToast" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-[9999] flex items-center min-w-[280px] justify-center">
+        <div 
+          :class="[
+            toastType === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+            toastType === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 
+            'bg-red-50 border-red-200 text-red-800'
+          ]"
+          class="w-full h-full flex items-center justify-center px-4 py-2.5 rounded-lg border shadow-md text-[11px] font-semibold"
+        >
+          <span>{{ toastMessage }}</span>
+        </div>
+      </div>
+    </transition>
+
       <div class="flex justify-between items-start mb-6">
           <div>
-              <p class="text-[12px] text-gray-500">
+              <p class="text-[11px] text-gray-500">
                   <RouterLink to="/Kelas" class="hover:underline">Kelas</RouterLink> 
                   <span class="mx-2 text-gray-400">&gt;</span>
                   <span @click="kembaliKeDetailKelas" class="cursor-pointer hover:underline">Detail Kelas</span> 
@@ -342,17 +350,17 @@ onMounted(async () => {
               </p>
               
               <div>
-                <h1 class="text-[20px] font-bold mb-6 mt-6">NILAI</h1>
+                <h1 class="text-[18px] font-bold mb-6 mt-6">NILAI</h1>
                 <div class="space-y-3 text-[14px]">
                     <div class="flex">
-                        <span class="w-[140px] text-[14px] font-medium">Mata Kuliah</span>
-                        <span class="text-[14px] font-medium">
+                        <span class="w-[140px] text-[12px] font-medium">Mata Kuliah</span>
+                        <span class="text-[12px] font-medium">
                             : {{ namaMataKuliah }}
                         </span>
                     </div>
                     <div class="flex">
-                        <span class="w-[140px] text-[14px] font-medium">Kelas</span>
-                        <span class="font-medium text-[14px]">
+                        <span class="w-[140px] text-[12px] font-medium">Kelas</span>
+                        <span class="font-medium text-[12px]">
                             : {{ namaKelas }}
                         </span>
                     </div>
@@ -374,11 +382,11 @@ onMounted(async () => {
           </p>
         </label>
         <div class="flex gap-3 mt-4">
-          <button @click="handleDownloadTemplate" :disabled="loading || nilaiData.length === 0" class="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-800 rounded text-[13px] font-medium hover:bg-blue-50 disabled:opacity-50">
+          <button @click="handleDownloadTemplate" :disabled="loading || nilaiData.length === 0" class="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-800 rounded text-[12px] font-medium hover:bg-blue-50 disabled:opacity-50">
             <Download class="w-4 h-4" /> Download Template
           </button>
-          <button @click="file = null" :disabled="loading || !file" class="px-4 py-2 bg-red-500 rounded text-[13px] text-white hover:bg-red-400 disabled:opacity-50">Batal</button>
-          <button @click="uploadNilai" :disabled="loading || !file" class="px-4 py-2 bg-blue-900 text-white rounded text-[13px] hover:bg-blue-800 disabled:opacity-50">
+          <button @click="file = null" :disabled="loading || !file" class="px-4 py-2 bg-red-500 rounded text-[12px] text-white hover:bg-red-400 disabled:opacity-50">Batal</button>
+          <button @click="uploadNilai" :disabled="loading || !file" class="px-4 py-2 bg-blue-900 text-white rounded text-[12px] hover:bg-blue-800 disabled:opacity-50">
             {{ loading ? 'Mengupload...' : 'Upload' }}
           </button>
         </div>

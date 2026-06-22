@@ -29,6 +29,18 @@ const inputTugas = ref(0);
 const inputUts = ref(0);
 const inputUas = ref(0);
 
+// --- STATE & FUNGSI POP-UP REPLACEMENT UNTUK ALERT ---
+const showToast = ref(false);
+const toastMessage = ref("");
+const toastType = ref("error");
+
+const pemicuToast = (message, type = "error") => {
+  toastMessage.value = message;
+  toastType.value = type;
+  showToast.value = true;
+  setTimeout(() => { showToast.value = false; }, 3000);
+};
+
 // Hitung live total input di dalam modal pop-up (Tugas + UTS + UAS)
 const liveTotalInput = computed(() => {
   return Number(inputTugas.value) + Number(inputUts.value) + Number(inputUas.value);
@@ -115,7 +127,7 @@ const tutupModal = () => { isModalOpen.value = false; };
 // --- SIMPAN / UPDATE DATA NILAI ---
 const simpanAturanNilai = async () => {
   if (liveTotalInput.value !== 100) {
-    alert(`Total akumulasi bobot harus tepat 100%. Saat ini: ${liveTotalInput.value}%`);
+    pemicuToast(`Total akumulasi bobot harus tepat 100%. Saat ini: ${liveTotalInput.value}%`, "warning");
     return;
   }
 
@@ -124,7 +136,7 @@ const simpanAturanNilai = async () => {
     const payload = {
       course_code: mataKuliahKode.value,
       course_name: namaMataKuliah.value, 
-      assignment: Number(inputTugas.value), // Pure hanya mengambil inputTugas
+      assignment: Number(inputTugas.value), 
       uts: Number(inputUts.value),
       uas: Number(inputUas.value),
       lecturer_id: pengampuId.value || "019e4314-e2b6-729a-aced-f5cf529a1cee"
@@ -138,15 +150,15 @@ const simpanAturanNilai = async () => {
     }
 
     if (res && (res.success || res.code === 200)) {
-      alert("Aturan nilai berhasil disimpan!");
+      pemicuToast("Aturan nilai berhasil disimpan!", "success");
       tutupModal();
       await fetchAturanNilai(); 
     } else {
-      alert(res?.message || "Gagal memproses aturan nilai.");
+      pemicuToast(res?.message || "Gagal memproses aturan nilai.", "error");
     }
   } catch (err) {
     console.error("Kesalahan sistem simpan aturan nilai:", err);
-    alert("Terjadi gangguan jaringan saat menyimpan aturan nilai.");
+    pemicuToast("Terjadi gangguan jaringan saat menyimpan aturan nilai.", "error");
   } finally {
     loading.value = false;
   }
@@ -172,9 +184,31 @@ onMounted(async () => {
 
 <template>
   <adminLayout>
+    <transition
+      enter-active-class="transform ease-out duration-300 transition"
+      enter-from-class="translate-y-[-20px] opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition ease-in duration-200"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="showToast" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-[9999] flex items-center min-w-[280px] justify-center">
+        <div 
+          :class="[
+            toastType === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+            toastType === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 
+            'bg-red-50 border-red-200 text-red-800'
+          ]"
+          class="w-full h-full flex items-center justify-center px-4 py-2.5 rounded-lg border shadow-md text-[11px] font-semibold"
+        >
+          <span>{{ toastMessage }}</span>
+        </div>
+      </div>
+    </transition>
+
     <div class="flex justify-between items-start mb-6">
         <div>
-            <p class="text-[12px] mb-2 text-gray-500">
+            <p class="text-[11px] mb-2 text-gray-500">
                 <RouterLink to="/Kelas" class="hover:underline">Kelas</RouterLink> 
                 <span class="mx-2 ">&gt;</span>
                 <span @click="kembaliKeDetailKelas" class="cursor-pointer hover:underline transition">Detail Kelas</span> 
@@ -183,17 +217,17 @@ onMounted(async () => {
             </p>
 
             <div>
-                <h1 class="text-[20px] font-bold mb-6 mt-6">ATURAN NILAI</h1>
-                <div class="space-y-3 text-[14px]">
+                <h1 class="text-[18px] font-bold mb-6 mt-6">ATURAN NILAI</h1>
+                <div class="space-y-3 text-[12px]">
                     <div class="flex">
-                        <span class="w-[140px] text-[14px] font-medium">Mata Kuliah</span>
-                        <span class="text-[14px] font-medium">
+                        <span class="w-[140px] text-[12px] font-medium">Mata Kuliah</span>
+                        <span class="text-[12px] font-medium">
                             : {{ namaMataKuliah || '-' }}
                         </span>
                     </div>
                     <div class="flex">
-                        <span class="w-[140px] text-[14px] font-medium">Kelas</span>
-                        <span class=" font-medium text-[14px]">
+                        <span class="w-[140px] text-[12px] font-medium">Kelas</span>
+                        <span class=" font-medium text-[12px]">
                             : {{ namaKelas || '-' }}
                         </span>
                     </div>

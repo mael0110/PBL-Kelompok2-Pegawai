@@ -14,7 +14,6 @@ const search = ref("");
 const currentPage = ref(1);
 const searchPeserta = ref("");
 
-// 🔥 PERBAIKAN URUTAN PRIORITAS: Ambil classId yang murni dikirim dari Klik data Kelas Saya
 const classId = ref(route.query.classId || route.query.class_id || route.query.id || "");
 const mataKuliahKode = computed(() => route.query.kode || "");
 const pengampuId = computed(() => route.query.pengampuId || route.query.pengampu_id || "");
@@ -41,7 +40,7 @@ const infoKelas = ref({
 });
 const sesiList = ref([]);
 const pesertaKelas = ref([]);
-const totalMahasiswa = ref(0); // Menampung jumlah riil mahasiswa
+const totalMahasiswa = ref(0); 
 const topikKelas = ref("");
 const showModal = ref(false);
 
@@ -51,7 +50,18 @@ const selectedJadwal = ref({
   number: "",
 });
 
-// FUNGSI HELPER: Mengubah angka semester menjadi format terbilang
+// --- STATE: NOTIFIKASI POP-UP (TOAST) ---
+const showToast = ref(false);
+const toastMessage = ref("");
+const toastType = ref("error");
+
+const pemicuToast = (message, type = "error") => {
+  toastMessage.value = message;
+  toastType.value = type;
+  showToast.value = true;
+  setTimeout(() => { showToast.value = false; }, 3000);
+};
+
 const formatSemesterTerbilang = (num) => {
   if (!num) return "-";
   const terbilang = ["", "Satu", "Dua", "Tiga", "Empat", "Lima", "Enam", "Tujuh", "Delapan"];
@@ -60,7 +70,6 @@ const formatSemesterTerbilang = (num) => {
   return `${parseNum} (${terbilang[parseNum]})`;
 };
 
-// FUNGSI HELPER: Mengubah session_date YYYY-MM-DD menjadi nama hari Indonesia
 const konversiKeHari = (dateString) => {
   if (!dateString || dateString === "-") return "-";
   try {
@@ -73,19 +82,12 @@ const konversiKeHari = (dateString) => {
   }
 };
 
-// 🟢 FUNGSI HELPER BARU: Mengubah format tulisan mentah prodi backend menjadi tulisan baku resmi
 const formatNamaProdi = (prodiString) => {
   if (!prodiString || prodiString === "-") return "-";
-  
-  // Normalisasi string mentah dari backend (hilangkan spasi berlebih, ubah ke lowercase)
   const cleanString = String(prodiString).trim().toLowerCase();
-  
-  // Jika mendeteksi string 'teknik-infromatika' atau variasi salah ketik bawaan backend lainnya
   if (cleanString === "teknik-infromatika" || cleanString === "teknik-informatika" || cleanString === "teknik informatika") {
     return "Teknik Informatika";
   }
-  
-  // Fallback cadangan: Mengubah format snake-case/kebab-case menjadi kapital perkata otomatis jika ada prodi lain
   return cleanString
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
@@ -123,12 +125,10 @@ const fetchSesiPelajaran = async () => {
       };
     });
 
-    // info kelas dari item pertama
     if (list.length > 0) {
       const first = list[0];
       const hariHasilKonversi = konversiKeHari(first.session_date);
 
-      // MENGISI DATA YANG KOSONG: Cocokkan getKelasByProdi dengan first.class_name
       let dataProdiCocok = null;
       try {
         const responseProdi = await getKelasByProdi();
@@ -150,7 +150,6 @@ const fetchSesiPelajaran = async () => {
         console.error("Gagal get prodi master:", prodiErr);
       }
 
-      // LOGIKA UNTUK MENCARI SKS DI DALAM ARRAY kurikulum_mk
       let sksHasilPencarian = "-";
       if (dataProdiCocok?.kurikulum?.kurikulum_mk && Array.isArray(dataProdiCocok.kurikulum.kurikulum_mk)) {
         const mkCocok = dataProdiCocok.kurikulum.kurikulum_mk.find(item => 
@@ -161,7 +160,6 @@ const fetchSesiPelajaran = async () => {
         }
       }
 
-      // Olah data Tahun Akademik
       let tahunFormat = "-";
       if (dataProdiCocok?.tahun_akademik) {
         const awal = dataProdiCocok.tahun_akademik.tahun_awal || "";
@@ -171,7 +169,6 @@ const fetchSesiPelajaran = async () => {
         tahunFormat = `${awal}/${akhir} ${tipeKapital}`.trim();
       }
 
-      // Ambil nama prodi mentah dari backend
       const rawProdiName = dataProdiCocok?.prodi?.name || "-";
 
       infoKelas.value = {
@@ -185,7 +182,6 @@ const fetchSesiPelajaran = async () => {
         sks: first.sks || sksHasilPencarian,
         ruangan: dataProdiCocok?.room?.name || dataProdiCocok?.ruangan || "-",
         semester: dataProdiCocok ? formatSemesterTerbilang(dataProdiCocok.semester) : "-",
-        // 🟢 PERBAIKAN DI SINI: Bungkus rawProdiName dengan fungsi formatter yang dibuat di atas
         prodi: formatNamaProdi(rawProdiName),
         tahunAkademik: tahunFormat
       };
@@ -202,8 +198,6 @@ const fetchPesertaKelas = async () => {
 
   try {
     const resUtuh = await getMahasiswaKelas(classId.value);
-    console.log("🔥 ISI RESPON UTUH SUDAH TERJAHIT NIM:", resUtuh);
-    
     const arrayData = resUtuh?.data || [];
     
     if (Array.isArray(arrayData) && arrayData.length > 0) {
@@ -222,17 +216,13 @@ const fetchPesertaKelas = async () => {
       pesertaKelas.value = [];
     }
 
-    // 🔥 BARU: Sinkronisasi counter utama di atas agar langsung mengikuti panjang array murni kelompok 1
     totalMahasiswa.value = pesertaKelas.value.length;
     infoKelas.value.peserta = pesertaKelas.value.length;
-
-    console.log("🚀 STATE PESERTA SIAP DI-RENDER:", pesertaKelas.value);
   } catch (error) {
     console.error("Gagal ambil peserta kelas:", error);
   }
 };
 
-// Filter Peserta Berdasarkan Input Search
 const filteredPeserta = computed(() => {
   if (!searchPeserta.value) return pesertaKelas.value;
   return pesertaKelas.value.filter(p =>
@@ -240,9 +230,7 @@ const filteredPeserta = computed(() => {
   );
 });
 
-// Hooks & Watchers
 onMounted(async () => {
-  // Panggil data peserta dulu agar counter up-to-date saat sesi diproses
   if (classId.value) {
     await fetchPesertaKelas();
   }
@@ -298,7 +286,7 @@ const handleSesiClick = (sesi) => {
 
 const bukaSesi = async () => {
   if (!topikKelas.value.trim()) {
-    alert("Mohon masukkan topik kelas terlebih dahulu!");
+    pemicuToast("Mohon masukkan topik kelas terlebih dahulu!", "warning");
     return;
   }
 
@@ -325,12 +313,12 @@ const bukaSesi = async () => {
         }
       });
     } else {
-      alert("Gagal mengaktifkan sesi perkuliahan.");
+      pemicuToast("Gagal mengaktifkan sesi perkuliahan.", "error");
     }
   } catch (error) {
     console.error("❌ Gagal buka sesi:", error);
     const pesanServer = error.response?.data?.errors?.status?.[0] || error.message;
-    alert(`Gagal membuka sesi. Pesan: ${pesanServer}`);
+    pemicuToast(`Gagal membuka sesi. Pesan: ${pesanServer}`, "error");
   }
 };
 
@@ -365,6 +353,29 @@ const lihatNilai = () => {
 
 <template>
 <adminLayout>
+  <!-- 🟢 POP-UP TOAST NOTIFICATION KECIL & TANPA BORDER HITAM -->
+  <transition
+    enter-active-class="transform ease-out duration-300 transition"
+    enter-from-class="translate-y-[-20px] opacity-0"
+    enter-to-class="translate-y-0 opacity-100"
+    leave-active-class="transition ease-in duration-200"
+    leave-from-class="opacity-100"
+    leave-to-class="opacity-0"
+  >
+    <div v-if="showToast" class="fixed top-5 left-1/2 transform -translate-x-1/2 z-[9999] flex items-center min-w-[280px] justify-center">
+      <div 
+        :class="[
+          toastType === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+          toastType === 'warning' ? 'bg-amber-50 border-amber-200 text-amber-800' : 
+          'bg-red-50 border-red-200 text-red-800'
+        ]"
+        class="w-full h-full flex items-center justify-center px-4 py-2.5 rounded-lg border shadow-md text-[11px] font-semibold"
+      >
+        <span>{{ toastMessage }}</span>
+      </div>
+    </div>
+  </transition>
+
   <div class="mb-4">
     <p class="text-[12px] mb-2">
       <RouterLink to="/kelas" class="hover:underline">Kelas</RouterLink>
@@ -411,6 +422,7 @@ const lihatNilai = () => {
     </div>    
   </div>
 
+  <!-- Ukuran Layout dan Grid Tetap Lebar Sesuai Gambar 5ab5b6c7-f038-42ea-b002-ae6aefc0e3fb -->
   <div class="bg-gray-100 flex gap-4 mt-4">
     <div class="bg-white p-3 w-[230px] rounded shadow text-[12px]">
       <button
@@ -527,13 +539,11 @@ const lihatNilai = () => {
           <h2 class="text-[13px] font-semibold mb-3">Peserta Kelas</h2>
 
           <div class="flex items-center gap-4">
-
             <div class="w-[70px] h-[70px] rounded-full bg-blue-100 flex items-center justify-center">
               <Users class="w-10 h-10 text-blue-900" />
             </div>
 
             <div class="flex-1">
-
               <div class="text-[14px] font-semibold">
                 {{ totalMahasiswa }} Mahasiswa
               </div>
@@ -645,33 +655,34 @@ const lihatNilai = () => {
     </div>
   </div>
 
-  <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div class="bg-white w-[420px] rounded-[8px] p-6 relative shadow-xl border border-gray-200">
-        <button @click="closeModal" class="absolute top-3 right-4 text-gray-500 text-xl font-bold hover:text-black">×</button>
+  <!-- 🟢 POP-UP MODAL KECIL (340px) SELARAS DASHBOARD & SAMA SEPERTI DI GAMBAR -->
+  <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div class="bg-white w-full max-w-[340px] rounded-xl p-5 relative shadow-xl border border-gray-100">
+        <button @click="closeModal" class="absolute top-2 right-3.5 text-gray-400 text-lg font-bold hover:text-black">×</button>
 
-        <div class="flex justify-center mb-2">
-          <CalendarClock class="w-12 h-12" />
+        <div class="flex justify-center mb-1.5">
+          <CalendarClock class="w-10 h-10" />
         </div>
 
-        <h2 class="text-center text-[16px] font-bold mb-4">Buka Sesi Perkuliahan</h2>
+        <h2 class="text-center text-sm font-bold text-slate-800 mb-3">Buka Sesi Perkuliahan</h2>
 
-        <div class="rounded-[6px] p-3 mb-4 bg-gray-50 border border-gray-200">
-          <h3 class="font-bold text-[13px] ">{{ selectedJadwal.mataKuliah }}</h3>
-          <p class="text-[11px] text-gray-400 mb-2">Sesi ke-{{ selectedJadwal.number }}</p>
-          <label class="block text-[11px] font-semibold mb-1">Topik Pembelajaran</label>
+        <div class="rounded-lg p-2.5 mb-3 bg-gray-50 border border-gray-200">
+          <h3 class="font-bold text-xs text-gray-800 leading-tight mb-0.5">{{ selectedJadwal.mataKuliah }}</h3>
+          <p class="text-[10px] text-gray-400 mb-2">Sesi ke-{{ selectedJadwal.number }}</p>
+          <label class="block text-[10px] font-semibold mb-1 text-gray-600">Topik Pembelajaran</label>
           <input
             v-model="topikKelas"
             type="text"
             placeholder="Masukkan topik perkuliahan hari ini..."
-            class="w-full border border-gray-300 rounded px-3 py-1.5 text-[12px] outline-none bg-white focus:border-blue-900"
+            class="w-full border border-gray-300 rounded px-2.5 py-1.5 text-[11px] outline-none bg-white focus:border-blue-900"
           />
         </div>
 
-        <p class="text-center text-[11px] text-gray-500 mb-5">Apakah Anda yakin ingin membuka sesi perkuliahan?<br/><span class="text-[10px] text-gray-400">Mahasiswa dapat mengisi daftar presensi setelah sesi diaktifkan.</span></p>
+        <p class="text-center text-[10px] text-gray-500 mb-4 leading-normal">Apakah Anda yakin ingin membuka sesi perkuliahan?<br/><span class="text-[9px] text-gray-400">Mahasiswa dapat mengisi daftar presensi setelah sesi diaktifkan.</span></p>
 
-        <div class="flex gap-3">
-          <button @click="closeModal" class="w-full border text-white font-semibold py-1.5 rounded text-[12px] hover:bg-red-400 bg-red-500">Batal</button>
-          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-1.5 rounded text-[12px] hover:bg-blue-800">Buka Sesi</button>
+        <div class="flex gap-2">
+          <button @click="closeModal" class="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-1.5 rounded-md text-[11px] transition">Batal</button>
+          <button @click="bukaSesi" class="w-full bg-blue-900 text-white font-semibold py-1.5 rounded-md text-[11px] hover:bg-blue-800 transition">Buka Sesi</button>
         </div>
       </div>
   </div>

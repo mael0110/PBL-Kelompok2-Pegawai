@@ -29,6 +29,20 @@ const profile = ref({
   citizen: ""
 });
 
+// State untuk Pop-up Kustom Pengganti Alert
+const customAlert = ref({
+  show: false,
+  message: ""
+});
+
+const showAlertPopup = (msg) => {
+  customAlert.value.message = msg;
+  customAlert.value.show = true;
+  setTimeout(() => {
+    customAlert.value.show = false;
+  }, 3000);
+};
+
 // ambil foto dari localStorage
 const savedPhoto = localStorage.getItem("profile_photo");
 if (savedPhoto) profile.value.photo = savedPhoto;
@@ -79,6 +93,7 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error("Gagal ambil profile:", error.response?.data || error);
+    showAlertPopup("Gagal mengambil data profil dari server.");
   }
 });
 
@@ -99,6 +114,7 @@ const handleFileChange = (event) => {
     profile.value.photo = base64;
     profileStore.photo = base64;
     localStorage.setItem("profile_photo", base64);
+    showAlertPopup("Foto profil berhasil diperbarui!");
   };
   reader.readAsDataURL(file);
 };
@@ -140,21 +156,27 @@ const saveProfile = async () => {
     profile.value.nik = editForm.value.nik;
 
     showEditModal.value = false;
+    showAlertPopup("Profil berhasil diperbarui!");
   } catch (error) {
     console.error("Gagal update profile:", error.response?.data || error);
+    showAlertPopup("Gagal memperbarui profil.");
   }
 };
 </script>
 
 <template>
 <admin-layout>
+  <div v-if="customAlert.show" class="fixed top-5 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded shadow-lg text-[11px] z-[9999] transition-all duration-300">
+    {{ customAlert.message }}
+  </div>
+
   <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" class="hidden" style="display: none;" />
 
-  <h1 class="text-[22px] font-bold mb-5">PROFIL</h1>
+  <h1 class="text-[16px] font-bold mb-4">PROFIL</h1>
 
   <div class="bg-gray-100 min-h-screen">
 
-    <div class="bg-white rounded-xl shadow-sm p-5 flex justify-between items-end">
+    <div class="bg-white rounded-xl shadow-sm p-4 flex justify-between items-end">
 
       <div class="flex items-start gap-4">
 
@@ -162,12 +184,12 @@ const saveProfile = async () => {
 
           <img
             :src="profile.photo || 'https://placehold.co/150'"
-            class="w-[90px] h-[90px] rounded-full object-cover border"
+            class="w-[75px] h-[75px] rounded-full object-cover border"
           />
 
           <button
             @click="openFilePicker"
-            class="mt-2 bg-blue-900 text-white px-3 py-1 rounded text-[12px]"
+            class="mt-2 bg-blue-900 text-white px-2.5 py-1 rounded text-[10px]"
           >
             Ubah Foto
           </button>
@@ -175,15 +197,15 @@ const saveProfile = async () => {
         </div>
 
         <div>
-          <h2 class="font-bold text-[16px]">
+          <h2 class="font-bold text-[14px]">
             {{ profile.name }}
           </h2>
 
-          <span class="inline-block mt-1 px-2 py-[2px] bg-blue-100 text-blue-700 text-xs rounded">
+          <span class="inline-block mt-1 px-2 py-[1px] bg-blue-100 text-blue-700 text-[10px] rounded">
             {{ profile.jabatan }}
           </span>
 
-          <p class="text-[12px] text-gray-500 mt-1">
+          <p class="text-[11px] text-gray-500 mt-1">
             Fakultas Teknik - Program Studi Teknik Informatika
           </p>
         </div>
@@ -193,7 +215,7 @@ const saveProfile = async () => {
       <div>
         <button
           @click="openEditModal"
-          class="border border-blue-900 px-3 hover:bg-gray-100 py-1 rounded text-[13px]"
+          class="border border-blue-900 px-2.5 hover:bg-gray-100 py-1 rounded text-[11px]"
         >
           Edit Profil
         </button>
@@ -201,51 +223,51 @@ const saveProfile = async () => {
 
     </div>
 
-    <div class="grid grid-cols-2 gap-4 mt-5">
+    <div class="grid grid-cols-2 gap-4 mt-4">
 
-      <div class="bg-white p-5 rounded-xl shadow-sm">
+      <div class="bg-white p-4 rounded-xl shadow-sm">
 
-        <h3 class="font-semibold mb-4">INFORMASI PRIBADI</h3>
+        <h3 class="font-semibold text-[12px] mb-3">INFORMASI PRIBADI</h3>
 
-        <div class="space-y-3 text-[14px]">
+        <div class="space-y-2.5 text-[11px]">
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>NIP</span>
             <span class="text-center">:</span>
             <span>{{ profile.nip }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>NIK</span>
             <span class="text-center">:</span>
             <span>{{ profile.nik }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Nama Lengkap</span>
             <span class="text-center">:</span>
             <span>{{ profile.name }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Jenis Kelamin</span>
             <span class="text-center">:</span>
             <span>{{ profile.gender }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Tempat, Tgl Lahir</span>
             <span class="text-center">:</span>
             <span>{{ profile.birth_place }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>No Telepon</span>
             <span class="text-center">:</span>
             <span>{{ profile.phone }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Kewarganegaraan</span>
             <span class="text-center">:</span>
             <span>{{ profile.citizen }}</span>
@@ -254,43 +276,43 @@ const saveProfile = async () => {
         </div>
       </div>
 
-      <div class="bg-white p-5 rounded-xl shadow-sm">
+      <div class="bg-white p-4 rounded-xl shadow-sm">
 
-        <h3 class="font-semibold mb-4">ALAMAT</h3>
+        <h3 class="font-semibold text-[12px] mb-3">ALAMAT</h3>
 
-        <div class="space-y-3 text-[14px]">
+        <div class="space-y-2.5 text-[11px]">
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Alamat</span>
             <span class="text-center">:</span>
             <span>{{ profile.address }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Kelurahan</span>
             <span class="text-center">:</span>
             <span>{{ profile.village }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Kecamatan</span>
             <span class="text-center">:</span>
             <span>{{ profile.district }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Kabupaten/Kota</span>
             <span class="text-center">:</span>
             <span>{{ profile.city }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Provinsi</span>
             <span class="text-center">:</span>
             <span>{{ profile.province }}</span>
           </div>
 
-          <div class="grid grid-cols-[160px_20px_1fr]">
+          <div class="grid grid-cols-[140px_20px_1fr]">
             <span>Negara</span>
             <span class="text-center">:</span>
             <span>{{ profile.citizen }}</span>
@@ -301,17 +323,17 @@ const saveProfile = async () => {
 
     </div>
 
-    <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center">
-      <div class="bg-white w-[420px] p-5 rounded-xl">
-        <h2 class="font-bold mb-3">Edit Profil</h2>
+    <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white w-[360px] p-4 rounded-xl text-[11px]">
+        <h2 class="font-bold text-[13px] mb-2">Edit Profil</h2>
 
-        <input v-model="editForm.name" class="border w-full p-2 mb-2 rounded" />
-        <input v-model="editForm.nip" class="border w-full p-2 mb-2 rounded" />
-        <input v-model="editForm.nik" class="border w-full p-2 mb-2 rounded" />
+        <input v-model="editForm.name" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="Nama" />
+        <input v-model="editForm.nip" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="NIP" />
+        <input v-model="editForm.nik" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="NIK" />
 
         <div class="flex justify-end gap-2 mt-3">
-          <button @click="closeEditModal" class="px-3 py-1 border rounded">Batal</button>
-          <button @click="saveProfile" class="px-3 py-1 bg-blue-900 text-white rounded">Simpan</button>
+          <button @click="closeEditModal" class="px-2.5 py-1 border rounded hover:bg-gray-50">Batal</button>
+          <button @click="saveProfile" class="px-2.5 py-1 bg-blue-900 text-white rounded hover:bg-blue-800">Simpan</button>
         </div>
       </div>
     </div>
