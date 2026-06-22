@@ -1,16 +1,28 @@
 <script setup>
 import AdminLayout from "./adminLayout.vue";
-import { ref, onMounted } from "vue";
-import { IdCard, Mail, Phone } from "lucide-vue-next";
+import { ref, onMounted, reactive } from "vue";
+import { IdCard, Mail, Phone, X } from "lucide-vue-next";
 import { authService } from "../services/auth";
 import { profileStore } from "../assets/profile";
+import { wilayahService } from "../services/wilayah"; // 🟢 Import service wilayah yang sama
 
 const { getProfile, updateEmployee } = authService();
 
-// 🟢 Menggunakan employeeId default/initial pilihanmu
+// Gunakan wilayahService bawaan kamu
+const {
+  provinces,
+  cities,
+  districts,
+  villages,
+  getProvinces,
+  getCities,
+  getDistricts,
+  getVillages,
+} = wilayahService();
+
 const employeeId = ref("019eea91-3220-70da-820b-b7aaab9d6a13");
 
-// state profile dengan property penampung asli dari relasi objek API Anda
+// State profile utama untuk penampilan halaman biodata
 const profile = ref({
   photo: "",
   name: "",
@@ -43,17 +55,18 @@ const showAlertPopup = (msg) => {
   }, 3000);
 };
 
-// ambil foto dari localStorage
+// Ambil foto dari localStorage
 const savedPhoto = localStorage.getItem("profile_photo");
 if (savedPhoto) profile.value.photo = savedPhoto;
 
 onMounted(async () => {
   try {
+    // Load data provinsi awal
+    await getProvinces();
+
     const res = await getProfile();
-    
     let data = null;
 
-    // Menangani struktur response list array atau single object dari API Anda
     if (res && Array.isArray(res.data)) {
       if (res.data.length > 0) data = res.data[0];
     } else if (res && res.data) {
@@ -63,27 +76,34 @@ onMounted(async () => {
     }
 
     if (data) {
-      // Ambil ID dinamis dari API jika tersedia untuk fungsi update
       employeeId.value = data.id || data.employee_id || employeeId.value;
 
-      // 🟢 PEMETAAN MURNI 100% DARI PROPERTY API ASLI ANDA
       profile.value.name = data.employee_name;
       profile.value.nip = data.nip;
       profile.value.nik = data.nik;
       profile.value.email = data.nip + "@dosen.com";
       profile.value.phone = data.phone_number;
       
-      // Data Biodata Tambahan dari API
       profile.value.gender = data.gender === 'female' ? 'Perempuan' : 'Laki-laki';
       profile.value.birth_place = data.birth_place + ", " + (data.birth_date || "");
       
-      // Data Alamat Struktural hasil relasi API Anda (village, district, city, province, citizen)
       profile.value.address = data.address;
       profile.value.village = data.village?.name || "-";
       profile.value.district = data.district?.name || "-";
       profile.value.city = data.city?.name || "-";
       profile.value.province = data.province?.name || "-";
       profile.value.citizen = data.citizen?.name || "Indonesia";
+
+      // Simpan data kode wilayah awal ke editForm reactive saat data masuk
+      editForm.province_code = data.province_code || "";
+      editForm.city_code = data.city_code || "";
+      editForm.district_code = data.district_code || "";
+      editForm.village_code = data.village_code || "";
+
+      // Panggil dependensi wilayah berantai agar pilihan awal muncul di edit modal
+      if (data.province_code) await getCities(data.province_code);
+      if (data.city_code) await getDistricts(data.city_code);
+      if (data.district_code) await getVillages(data.district_code);
 
       if (!profile.value.photo && data.photo) {
         profile.value.photo = data.photo;
@@ -97,17 +117,12 @@ onMounted(async () => {
   }
 });
 
-// file input
+// File input handle
 const fileInput = ref(null);
-
-const openFilePicker = () => {
-  fileInput.value.click();
-};
-
+const openFilePicker = () => { fileInput.value.click(); };
 const handleFileChange = (event) => {
   const file = event.target.files[0];
   if (!file) return;
-
   const reader = new FileReader();
   reader.onload = () => {
     const base64 = reader.result;
@@ -119,21 +134,37 @@ const handleFileChange = (event) => {
   reader.readAsDataURL(file);
 };
 
-// edit modal
+// Edit modal state & form reactive disesuaikan penamaan kodenya
 const showEditModal = ref(false);
 
-const editForm = ref({
+const editForm = reactive({
   name: "",
   nip: "",
   nik: "",
+  gender: "",
+  birth_place: "",
+  birth_date: "",
+  phone: "",
+  address: "",
+  province_code: "",
+  city_code: "",
+  district_code: "",
+  village_code: "",
+  citizen_code: "ID"
 });
 
-const openEditModal = () => {
-  editForm.value = {
-    name: profile.value.name,
-    nip: profile.value.nip,
-    nik: profile.value.nik,
-  };
+const openEditModal = async () => {
+  const bpParts = profile.value.birth_place.split(", ");
+  
+  editForm.name = profile.value.name;
+  editForm.nip = profile.value.nip;
+  editForm.nik = profile.value.nik;
+  editForm.gender = profile.value.gender === 'Perempuan' ? 'female' : 'male';
+  editForm.birth_place = bpParts[0] || "";
+  editForm.birth_date = bpParts[1] || "";
+  editForm.phone = profile.value.phone;
+  editForm.address = profile.value.address;
+  
   showEditModal.value = true;
 };
 
@@ -141,19 +172,59 @@ const closeEditModal = () => {
   showEditModal.value = false;
 };
 
+// Fungsi Handle Perubahan Wilayah (Sama persis dengan logic referensimu)
+const handleProvinceChange = async () => {
+  editForm.city_code = "";
+  editForm.district_code = "";
+  editForm.village_code = "";
+  await getCities(editForm.province_code);
+};
+
+const handleCityChange = async () => {
+  editForm.district_code = "";
+  editForm.village_code = "";
+  await getDistricts(editForm.city_code);
+};
+
+const handleDistrictChange = async () => {
+  editForm.village_code = "";
+  await getVillages(editForm.district_code);
+};
+
 const saveProfile = async () => {
   try {
     const payload = {
-      employee_name: editForm.value.name,
-      nip: editForm.value.nip,
-      nik: editForm.value.nik,
+      employee_name: editForm.name,
+      nip: editForm.nip,
+      nik: editForm.nik,
+      gender: editForm.gender,
+      birth_place: editForm.birth_place,
+      birth_date: editForm.birth_date,
+      phone_number: editForm.phone,
+      address: editForm.address,
+      province_code: editForm.province_code,
+      city_code: editForm.city_code,
+      district_code: editForm.district_code,
+      village_code: editForm.village_code,
+      citizen_code: "ID"
     };
 
     await updateEmployee(employeeId.value, payload);
 
-    profile.value.name = editForm.value.name;
-    profile.value.nip = editForm.value.nip;
-    profile.value.nik = editForm.value.nik;
+    // Update tampilan data setelah sukses submit
+    profile.value.name = editForm.name;
+    profile.value.nip = editForm.nip;
+    profile.value.nik = editForm.nik;
+    profile.value.gender = editForm.gender === 'female' ? 'Perempuan' : 'Laki-laki';
+    profile.value.birth_place = editForm.birth_place + ", " + editForm.birth_date;
+    profile.value.phone = editForm.phone;
+    profile.value.address = editForm.address;
+
+    // Menarik nama text dari list array wilayah terpilih untuk view halaman utama
+    profile.value.province = provinces.value.find(p => p.code === editForm.province_code)?.name || "-";
+    profile.value.city = cities.value.find(c => c.code === editForm.city_code)?.name || "-";
+    profile.value.district = districts.value.find(d => d.code === editForm.district_code)?.name || "-";
+    profile.value.village = villages.value.find(v => v.code === editForm.village_code)?.name || "-";
 
     showEditModal.value = false;
     showAlertPopup("Profil berhasil diperbarui!");
@@ -323,17 +394,113 @@ const saveProfile = async () => {
 
     </div>
 
-    <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div class="bg-white w-[360px] p-4 rounded-xl text-[11px]">
-        <h2 class="font-bold text-[13px] mb-2">Edit Profil</h2>
+    <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto p-5 rounded-xl text-[11px] relative shadow-xl">
+        
+        <button @click="closeEditModal" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+          <X class="w-4 h-4" />
+        </button>
 
-        <input v-model="editForm.name" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="Nama" />
-        <input v-model="editForm.nip" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="NIP" />
-        <input v-model="editForm.nik" class="border w-full p-2 mb-2 rounded focus:outline-none" placeholder="NIK" />
+        <h2 class="font-bold text-[13px] mb-4 tracking-wide">EDIT PROFIL</h2>
 
-        <div class="flex justify-end gap-2 mt-3">
-          <button @click="closeEditModal" class="px-2.5 py-1 border rounded hover:bg-gray-50">Batal</button>
-          <button @click="saveProfile" class="px-2.5 py-1 bg-blue-900 text-white rounded hover:bg-blue-800">Simpan</button>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-gray-600 mb-1">Nama Lengkap</label>
+            <input v-model="editForm.name" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="Nama Lengkap" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-600 mb-1">NIP</label>
+              <input v-model="editForm.nip" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="NIP" />
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">NIK</label>
+              <input v-model="editForm.nik" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="NIK" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-600 mb-1">Jenis Kelamin</label>
+              <select v-model="editForm.gender" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900 bg-white">
+                <option value="male">Laki-laki</option>
+                <option value="female">Perempuan</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">Tempat Lahir</label>
+              <input v-model="editForm.birth_place" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="Tempat Lahir" />
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-600 mb-1">Tanggal Lahir</label>
+              <input type="date" v-model="editForm.birth_date" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" />
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">Nomor Telepon</label>
+              <input v-model="editForm.phone" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="Nomor Telepon" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-gray-600 mb-1">Alamat</label>
+            <input v-model="editForm.address" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="Alamat" />
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-600 mb-1">Provinsi</label>
+              <select v-model="editForm.province_code" @change="handleProvinceChange" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900 bg-white">
+                <option value="">Pilih Provinsi</option>
+                <option v-for="item in provinces" :key="item.id" :value="item.code">
+                  {{ item.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">Kabupaten/Kota</label>
+              <select v-model="editForm.city_code" @change="handleCityChange" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900 bg-white">
+                <option value="">Pilih Kota</option>
+                <option v-for="item in cities" :key="item.id" :value="item.code">
+                  {{ item.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-gray-600 mb-1">Kecamatan</label>
+              <select v-model="editForm.district_code" @change="handleDistrictChange" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900 bg-white">
+                <option value="">Pilih Kecamatan</option>
+                <option v-for="item in districts" :key="item.id" :value="item.code">
+                  {{ item.name }}
+                </option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-gray-600 mb-1">Kelurahan</label>
+              <select v-model="editForm.village_code" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900 bg-white">
+                <option value="">Pilih Desa/Kelurahan</option>
+                <option v-for="item in villages" :key="item.id" :value="item.code">
+                  {{ item.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-gray-600 mb-1">Kewarganegaraan</label>
+            <input v-model="editForm.citizen" class="border w-full p-2 rounded focus:outline-none focus:border-blue-900" placeholder="Kewarganegaraan" disabled />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 mt-5">
+          <button type="button" @click="closeEditModal" class="px-4 py-1.5 border rounded text-white bg-red-500 border-red-500 rounded-md">Batal</button>
+          <button type="button" @click="saveProfile" class="px-4 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 rounded-md">Simpan</button>
         </div>
       </div>
     </div>
