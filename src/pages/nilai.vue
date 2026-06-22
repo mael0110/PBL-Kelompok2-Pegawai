@@ -387,7 +387,7 @@ onMounted(async () => {
       <div class="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
         <div v-if="loading && nilaiData.length === 0" class="p-8 text-center text-gray-400 text-[13px]">Memuat data mahasiswa...</div>
         <table v-else class="w-full text-[13px]">
-          <thead class="bg-blue-200 text-slate-800 border-b border-gray-200 font-semibold">
+          <thead class="bg-blue-100 text-slate-800 border-b border-gray-200 font-semibold">
             <tr>
               <th class="p-3 text-left w-32">NIM</th>
               <th class="p-3 text-left">Nama</th>
