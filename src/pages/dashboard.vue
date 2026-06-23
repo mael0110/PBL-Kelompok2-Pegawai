@@ -249,10 +249,28 @@ const todayKey = new Date().toISOString().split("T")[0];
 
 const submitPresensi = async () => {
   if (!statusPresensi.value) return;
+
   loadingPresensi.value = true;
+
   try {
-    const payload = { status: statusPresensi.value.trim().toLowerCase() };
+    const mapStatus = {
+      hadir: "hadir",
+      izin: "izin",
+      sakit: "sakit",
+      alpha: "alpha"
+    };
+
+    const payload = {
+      status: mapStatus[statusPresensi.value] || "alpha"
+    };
+
+    console.log("SEND PAYLOAD PRESENSI:", payload);
+
     const res = await presensiDosen(payload);
+
+    console.log("STATUS RAW:", statusPresensi.value);
+    console.log("STATUS SEND:", payload.status);
+
     if (res?.success || res) {
       sudahPresensi.value = true;
       localStorage.setItem("presensi_dosen_hari_ini", todayKey);
@@ -260,6 +278,7 @@ const submitPresensi = async () => {
       statusPresensi.value = "";
       await fetchSesiKalender();
     }
+
   } catch (error) {
     console.error("Error submit presensi:", error);
   } finally {
@@ -303,22 +322,22 @@ onMounted(() => {
     <!-- Header Dashboard Ringkas -->
     <div class="flex justify-between items-start mb-4">
       <div>
-        <h1 class="text-lg font-bold text-slate-800">Selamat Datang, Dosen Pengampu!</h1>
+        <h1 class="text-lg font-bold">Selamat Datang, Dosen Pengampu!</h1>
         <p class="text-[11px] text-gray-500">Berikut jadwal dan aktivitas Anda hari ini</p>
       </div>
 
       <!-- Informasi Hari Dikecilkan Padding & Text-nya -->
       <div class="bg-white px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-2 border border-gray-100">
         <CalendarDays class="w-4 h-4" />
-        <p class="font-semibold text-[11px] text-gray-700">{{ tanggalHariIni }}</p>
+        <p class="font-semibold text-[11px]">{{ tanggalHariIni }}</p>
       </div>
     </div>
 
     <div class="flex gap-4 items-start">
       <!-- Kolom Kiri -->
-      <div class="w-[440px] space-y-4">
+      <div class="w-[590px] space-y-4">
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-3.5">
-          <h1 class="text-xs font-bold text-gray-800 mb-2.5 tracking-wide">JADWAL KELAS HARI INI</h1>
+          <h1 class="text-xs font-bold mb-2.5 tracking-wide">JADWAL KELAS HARI INI</h1>
 
           <div class="space-y-2">
             <div
@@ -363,7 +382,7 @@ onMounted(() => {
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-[210px] flex flex-col justify-between">
           <div>
             <p class="text-gray-400 text-[10px] mb-0.5">Presensi Kehadiran Dosen</p>
-            <p class="text-xs font-semibold text-gray-700">{{ tanggalHariIni }}</p>
+            <p class="text-xs font-semibold">{{ tanggalHariIni }}</p>
           </div>
           
           <div class="flex justify-center my-1">
@@ -375,7 +394,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <p class="text-center text-xs font-semibold text-gray-700">
+          <p class="text-center text-xs font-semibold">
             {{ sudahPresensi ? "Anda sudah melakukan presensi hari ini" : "Anda belum melakukan presensi hari ini" }}
           </p>
           
@@ -394,7 +413,7 @@ onMounted(() => {
       <!-- Kolom Kanan (Kalender) -->
       <div class="w-[440px] flex flex-col space-y-4">
         <div class="bg-white shadow-sm border border-gray-100 rounded-xl p-3.5">
-          <h3 class="font-bold text-xs text-gray-800 mb-2.5 tracking-wide">Kalender Akademik</h3>
+          <h3 class="font-bold text-xs mb-2.5 tracking-wide">Kalender Akademik</h3>
 
           <!-- Navigasi Kalender Dikecilkan -->
           <div class="flex items-center justify-center gap-6 mb-2">
@@ -436,7 +455,7 @@ onMounted(() => {
           <!-- Jadwal Terpilih Di Bawah Kalender -->
           <div class="mt-1">
             <p class="text-gray-400 text-[10px] font-medium uppercase tracking-wide">Jadwal Kelas Terpilih</p>
-            <p class="text-xs font-bold text-gray-800 mb-2">{{ labelHariTerpilih }}</p>
+            <p class="text-xs font-bold mb-2">{{ labelHariTerpilih }}</p>
 
             <div class="space-y-2">
               <div 
@@ -492,8 +511,8 @@ onMounted(() => {
         
         <select v-model="statusPresensi" class="w-full border border-gray-200 bg-white p-1.5 rounded-md mb-3 text-[11px] outline-none focus:border-blue-900 text-gray-700">
           <option disabled value="">-- Pilih Status --</option>
-          <option value="hadir">Hadir (Mengajar)</option>
-          <option value="izin">Izin Resmi</option>
+          <option value="hadir">Hadir</option>
+          <option value="izin">Izin</option>
           <option value="sakit">Sakit</option>
         </select>
         
