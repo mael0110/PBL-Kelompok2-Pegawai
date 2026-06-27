@@ -318,7 +318,7 @@ const bukaSesi = async () => {
   } catch (error) {
     console.error("❌ Gagal buka sesi:", error);
     const pesanServer = error.response?.data?.errors?.status?.[0] || error.message;
-    pemicuToast(`Gagal membuka sesi, tanggal tidak sesuai`,);
+    pemicuToast(`Gagal membuka sesi, tanggal sesi tidak sesuai dengan hari ini`,);
   }
 };
 
